@@ -1,0 +1,2109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCSE CS: Embedded Systems</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Open+Sans&family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* Base styles */
+        :root {
+            --bg-color: #f0f4f8;
+            --text-color: #1e293b;
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --secondary-color: #ffffff;
+            --border-color: #cbd5e1;
+            --correct-color: #22c55e;
+            --incorrect-color: #ef4444;
+            --font-family: 'Inter', sans-serif;
+            --font-mono: 'Roboto Mono', monospace;
+            --font-size: 16px;
+        }
+
+        /* High contrast mode */
+        .high-contrast {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --primary-color: #ffff00;
+            --primary-hover: #e6e600;
+            --secondary-color: #1a1a1a;
+            --border-color: #ffffff;
+            --correct-color: #00ff00;
+            --incorrect-color: #ff00ff;
+        }
+
+        /* Dyslexia-friendly font */
+        .dyslexia-font {
+            --font-family: 'Open Sans', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            font-size: var(--font-size);
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .worksheet-container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            background-color: var(--secondary-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .worksheet-page {
+            display: none;
+            padding: 2rem 2.5rem;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .worksheet-page.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* UI Elements */
+        h1, h2, h3 {
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        h1 { font-size: 2.25rem; }
+        h2 { font-size: 1.75rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; }
+        h3 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.5rem; }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background-color: var(--primary-color);
+            color: white !important;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.2s;
+            text-decoration: none;
+        }
+        .btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background-color: #64748b;
+        }
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+
+        /* Gamification */
+        #xp-bar-container {
+            width: 100%;
+            background-color: #e2e8f0;
+            border-radius: 9999px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        #xp-bar {
+            height: 20px;
+            width: 0%;
+            background-color: var(--primary-color);
+            transition: width 0.5s ease-in-out;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        #achievement-popup {
+            position: fixed;
+            bottom: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #1e293b;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transition: bottom 0.5s ease-in-out;
+            z-index: 1000;
+        }
+
+        /* Drag and Drop */
+        .drop-zone {
+            border: 2px dashed var(--border-color);
+            padding: 1rem;
+            border-radius: 8px;
+            min-height: 100px;
+            transition: background-color 0.2s;
+        }
+        .drop-zone.drag-over {
+            background-color: #e0f2fe;
+        }
+        .draggable {
+            padding: 0.5rem 1rem;
+            margin: 0.5rem;
+            background-color: var(--secondary-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: grab;
+            display: inline-block;
+        }
+        .draggable.correct {
+            background-color: var(--correct-color);
+            color: white;
+            cursor: not-allowed;
+        }
+        .draggable.hidden {
+            display: none;
+        }
+
+        /* Fill in the Blanks */
+        .blank {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border: 2px dashed var(--border-color);
+            border-radius: 6px;
+            background-color: #f8fafc;
+            min-width: 120px;
+            text-align: center;
+            vertical-align: middle;
+            color: transparent;
+        }
+        .blank.filled {
+            border-style: solid;
+            border-color: var(--correct-color);
+            background-color: #e0f2fe;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+        
+        /* Writing Scorer */
+        #scoreCircle {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 1rem auto;
+            color: var(--text-color);
+        }
+        #successList li::before { content: '✔️ '; }
+        #improvementList li::before { content: '❌ '; }
+        #resultsDashboard { transition: opacity 0.5s; }
+        
+        /* Shame message */
+        #shame-message {
+            display: none;
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: auto;
+            background-color: #ef4444;
+            color: white;
+            font-size: 1rem;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            z-index: 9999;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        
+        /* Feedback Button */
+        #feedback-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 999;
+        }
+        #feedback-modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+        #feedback-modal-content {
+            background-color: var(--secondary-color);
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            width: 80%;
+            max-width: 500px;
+            border-radius: 12px;
+        }
+
+        .info-box {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-left-width: 4px;
+            border-radius: 4px;
+        }
+        .info-box-yellow {
+             background-color: #fefce8;
+             border-color: #facc15;
+        }
+
+        /* ATM Simulator Specific Styles */
+        .atm-wrapper {
+            background-color: #4a5568; /* slate-600 */
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr 220px;
+            gap: 1.5rem;
+            max-width: 800px;
+            margin: auto;
+        }
+        .atm-screen {
+            background-color: #047857; /* green-700 */
+            color: #d1fae5; /* green-50 */
+            font-family: var(--font-mono);
+            padding: 1rem;
+            border-radius: 8px;
+            height: 250px;
+            border: 4px solid #374151; /* gray-700 */
+        }
+        .atm-screen-content {
+            text-align: center;
+            padding-top: 1rem;
+        }
+        .atm-keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .keypad-btn {
+            background-color: #718096; /* gray-500 */
+            color: white;
+            border-radius: 6px;
+            padding: 0.75rem;
+            text-align: center;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 3px solid #4a5568;
+        }
+        .keypad-btn:active {
+            transform: translateY(2px);
+            border-bottom-width: 1px;
+        }
+        .atm-slots {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            justify-content: center;
+        }
+        .atm-slot {
+            background-color: #2d3748; /* gray-800 */
+            color: #a0aec0; /* gray-400 */
+            padding: 0.75rem;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 0.9rem;
+            border: 2px dashed #4a5568;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .atm-slot.active {
+            border-color: var(--success-color);
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 50% { background-color: #38a169; } }
+
+    </style>
+    <style>
+        /* Scoped styles for Explorer Simulator */
+        #explorer-sim-page {
+            --explorer-font-sans: 'Inter', sans-serif;
+            --explorer-font-mono: 'Roboto Mono', monospace;
+            --explorer-bg-color: #1a1c23;
+            --explorer-glass-bg: rgba(44, 48, 61, 0.6);
+            --explorer-glass-blur: blur(12px);
+            --explorer-border-color: rgba(255, 255, 255, 0.15);
+            --explorer-text-primary: #e8e8e8;
+            --explorer-text-secondary: #a0a0b0;
+            --explorer-accent-color: #3b82f6;
+            --explorer-success-color: #22c55e;
+            --explorer-error-color: #ef4444;
+            --explorer-glow-color: rgba(59, 130, 246, 0.7);
+        }
+
+        #explorer-sim-page .simulation-wrapper {
+            font-family: var(--explorer-font-sans);
+            color: var(--explorer-text-primary);
+            width: 100%;
+            max-width: 900px;
+            background: var(--explorer-glass-bg);
+            border-radius: 24px;
+            padding: clamp(1rem, 5vw, 2rem);
+            border: 1px solid var(--explorer-border-color);
+            backdrop-filter: var(--explorer-glass-blur);
+            -webkit-backdrop-filter: var(--explorer-glass-blur);
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        #explorer-sim-page .main-title { text-align: center; font-size: clamp(1.2rem, 5vw, 1.5rem); margin-top: 0; margin-bottom: 2rem; font-weight: 600; color: var(--explorer-text-primary); }
+        #explorer-sim-page .view { display: none; }
+        #explorer-sim-page .view.active { display: block; animation: fadeIn 0.5s; }
+        
+        #explorer-sim-page .explorer-menu { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }
+        #explorer-sim-page .explorer-card { background: rgba(0,0,0,0.2); border: 1px solid var(--explorer-border-color); border-radius: 16px; padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease; }
+        #explorer-sim-page .explorer-card:hover { transform: translateY(-5px); background: rgba(0,0,0,0.4); box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
+        #explorer-sim-page .explorer-card img { width: 100%; max-width: 200px; margin-bottom: 1rem; object-fit: contain; height: 120px; }
+        #explorer-sim-page .explorer-card h3 { margin: 0; color: var(--explorer-accent-color); }
+
+        #explorer-sim-page .car-container { position: relative; max-width: 600px; margin: 0 auto; }
+        #explorer-sim-page .car-image { width: 100%; display: block; }
+        #explorer-sim-page .hotspot { position: absolute; width: 30px; height: 30px; background-color: var(--explorer-accent-color); border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 0 15px var(--explorer-glow-color); transition: transform 0.2s, box-shadow 0.2s; transform: translate(-50%, -50%); }
+        #explorer-sim-page .hotspot:hover { transform: translate(-50%, -50%) scale(1.2); box-shadow: 0 0 25px var(--explorer-glow-color); }
+        #explorer-sim-page .hotspot.completed { background-color: var(--explorer-success-color); box-shadow: 0 0 15px var(--explorer-success-color); }
+        
+        #explorer-sim-page #hs-ecu { top: 60%; left: 82%; } 
+        #explorer-sim-page #hs-abs { top: 75%; left: 28%; }
+        #explorer-sim-page #hs-infotainment { top: 43%; left: 56%; } 
+        #explorer-sim-page #hs-airbag { top: 43%; left: 45%; } 
+        #explorer-sim-page #hs-climate { top: 58%; left: 63%; }
+
+        #explorer-sim-page .checkout-container { display: grid; grid-template-columns: 1fr 1.5fr; gap: 2rem; align-items: flex-start; }
+        @media (max-width: 768px) { #explorer-sim-page .checkout-container { grid-template-columns: 1fr; } }
+        #explorer-sim-page .checkout-items { background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 16px; text-align: center; }
+        #explorer-sim-page .item { display: flex; align-items: center; gap: 1rem; padding: 0.5rem; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+        #explorer-sim-page .item:hover { background: rgba(255,255,255,0.1); }
+        #explorer-sim-page .item svg { width: 50px; height: 50px; flex-shrink: 0; }
+        #explorer-sim-page .item.completed { opacity: 0.4; cursor: not-allowed; }
+
+        #explorer-sim-page .checkout-machine { background: #4a4a4a; border-radius: 16px; padding: 1rem; }
+        #explorer-sim-page .checkout-screen { background: #1e1e1e; color: #fff; padding: 1rem; border-radius: 8px; min-height: 200px; font-family: var(--explorer-font-mono); font-size: 0.9rem; margin-bottom: 1rem; border: 2px solid #282828;}
+        #explorer-sim-page .checkout-screen-item { display: flex; justify-content: space-between; }
+        #explorer-sim-page .checkout-screen-total { margin-top: 1rem; border-top: 1px dashed var(--explorer-text-secondary); padding-top: 0.5rem; font-weight: bold; }
+        #explorer-sim-page .peripheral-area { position: relative; background: rgba(0,0,0,0.2); margin-top: 1rem; padding: 1rem; border-radius: 8px; text-align: center; color: var(--explorer-text-secondary); border: 2px dashed var(--explorer-border-color); overflow: hidden; }
+        #explorer-sim-page .scanner-light { position: absolute; top: 50%; left: -10%; width: 120%; height: 3px; background: var(--explorer-error-color); box-shadow: 0 0 10px var(--explorer-error-color); transform: translateY(-50%) rotate(-20deg); opacity: 0; }
+        #explorer-sim-page .scan-area.active .scanner-light { animation: scan-anim-explorer 0.5s ease-out; }
+        @keyframes scan-anim-explorer { 0% { opacity: 1; transform: translateY(-50%) rotate(-20deg) scaleX(0); left: 50%; } 50% {transform: translateY(-50%) rotate(-20deg) scaleX(1); } 100% { opacity: 0; } }
+        #explorer-sim-page .bagging-area.error { border-color: var(--explorer-error-color); box-shadow: 0 0 15px var(--explorer-error-color); animation: shake-explorer 0.5s; }
+        @keyframes shake-explorer { 0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); } 20%, 40%, 60%, 80% { transform: translateX(5px); } }
+        #explorer-sim-page .payment-area { display: flex; justify-content: center; margin-top: 1rem; }
+        
+        #explorer-sim-page .back-button { background: rgba(108, 117, 125, 0.5); color: white; border: none; padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; position: absolute; top: 1rem; left: 1rem; }
+        #explorer-sim-page .sim-button { background-color: var(--explorer-accent-color); color: white; border: none; padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; margin: 0 0.5rem; }
+        #explorer-sim-page .sim-button:hover { transform: translateY(-2px); box-shadow: 0 4px 20px var(--explorer-glow-color); }
+        #explorer-sim-page .sim-button:disabled { background: #555; cursor: not-allowed; transform: none; box-shadow: none;}
+        
+        #explorer-sim-page .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: none; justify-content: center; align-items: center; z-index: 1000; animation: fadeIn 0.3s; }
+        #explorer-sim-page .modal-content { background: var(--explorer-glass-bg); border: 1px solid var(--explorer-border-color); border-radius: 16px; padding: clamp(1rem, 5vw, 2rem); width: 90%; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+        #explorer-sim-page .modal-title-container { display: flex; align-items: center; justify-content: center; gap: 0.75rem; color: var(--explorer-accent-color); }
+        #explorer-sim-page .modal-title-container svg { width: 28px; height: 28px; }
+        #explorer-sim-page .modal-content h3 { margin: 0; }
+        #explorer-sim-page .modal-body { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; margin-top: 1.5rem; color: var(--explorer-text-primary); }
+        #explorer-sim-page .quiz-container { text-align: center; }
+        #explorer-sim-page #quiz-question-explorer { font-size: 1.1rem; font-weight: 600; color: var(--explorer-text-primary); margin-bottom: 1rem;}
+        #explorer-sim-page .quiz-options { margin: 1.5rem 0; display: flex; flex-direction: column; gap: 0.75rem; }
+        #explorer-sim-page .quiz-option { width: 100%; padding: 0.75rem; border: 1px solid var(--explorer-border-color); background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; transition: background-color 0.2s; text-align: left; color: var(--explorer-text-primary); font-size: 1rem; }
+        #explorer-sim-page .quiz-option:hover { background: rgba(255,255,255,0.1); }
+        #explorer-sim-page .quiz-feedback { margin-top: 1rem; font-weight: 600; min-height: 24px; color: var(--explorer-text-primary); }
+        #explorer-sim-page .quiz-feedback.correct { color: var(--explorer-success-color); }
+        #explorer-sim-page .quiz-feedback.incorrect { color: var(--explorer-error-color); }
+        #explorer-sim-page .summary-list { text-align: left; list-style-type: '✓  '; padding-left: 2rem; color: var(--explorer-text-primary); }
+        #explorer-sim-page .summary-list li { padding-left: 0.75rem; margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div id="shame-message">
+        Pasting is disabled to encourage learning.
+    </div>
+
+    <div class="worksheet-container">
+        <!-- Header -->
+        <header class="p-4 bg-slate-800 text-white flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold">Embedded Systems</h1>
+                <p class="text-sm text-slate-300">OCR J277 Specification</p>
+            </div>
+            <div class="w-1/3">
+                <div class="flex items-center justify-end space-x-2">
+                    <span id="level-display" class="font-bold text-lg">Level 1</span>
+                    <span id="xp-display" class="text-sm text-slate-300">(0/100 XP)</span>
+                </div>
+                <div id="xp-bar-container" class="mt-1">
+                    <div id="xp-bar"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Quick Nav -->
+        <nav id="quick-nav" class="bg-slate-700 text-white p-2 flex justify-center space-x-2 overflow-x-auto"></nav>
+        
+        <!-- Main Content -->
+        <main>
+            <!-- Page 0: Introduction -->
+            <div class="worksheet-page active" data-name="Intro">
+                <h2>Welcome!</h2>
+                <p>This interactive worksheet will guide you through the topic of embedded systems. You'll complete tasks, simulations, and quizzes to build your knowledge.</p>
+                <h3>Learning Outcomes</h3>
+                <ul class="list-disc list-inside bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <li>Define what an embedded system is and how it differs from a general-purpose computer.</li>
+                    <li>Identify the key characteristics of both types of systems.</li>
+                    <li>Explain why embedded systems are used in specific devices like traffic lights and dishwashers.</li>
+                    <li>Apply your knowledge to exam-style questions.</li>
+                </ul>
+                <h3 class="mt-6">Starter Activity: Odd One Out</h3>
+                <p>Click on the item below that you think is the 'odd one out'.</p>
+                <div id="odd-one-out" class="flex justify-around items-center my-4 p-4 bg-gray-50 rounded-lg">
+                    <div class="starter-item cursor-pointer p-3 border-2 border-transparent hover:border-blue-500 rounded-lg text-center" data-item="Laptop">💻<br>Laptop</div>
+                    <div class="starter-item cursor-pointer p-3 border-2 border-transparent hover:border-blue-500 rounded-lg text-center" data-item="Smartphone">📱<br>Smartphone</div>
+                    <div class="starter-item cursor-pointer p-3 border-2 border-transparent hover:border-blue-500 rounded-lg text-center" data-item="Dishwasher">🍽️<br>Dishwasher</div>
+                    <div class="starter-item cursor-pointer p-3 border-2 border-transparent hover:border-blue-500 rounded-lg text-center" data-item="PC">🖥️<br>PC</div>
+                </div>
+                <div id="starter-feedback" class="hidden mt-2 p-3 rounded-lg"></div>
+            </div>
+            
+            <!-- Page 1: What is an Embedded System? -->
+            <div class="worksheet-page" data-name="Embedded">
+                <h2>1. What is an Embedded System?</h2>
+                <p>An embedded system is a combination of computer hardware and software designed for a <strong>specific function</strong> or functions within a larger mechanical or electrical system. Think of it as a computer with a single, dedicated job.</p>
+                
+                <h3 class="mt-6">Simulation: Traffic Light Control System</h3>
+                <p>Traffic lights are a classic example of an embedded system. Interact with the simulation below to see how the system processes inputs and controls outputs.</p>
+                
+                <div class="grid md:grid-cols-2 gap-6 my-4 p-4 bg-gray-800 text-white rounded-lg">
+                    <!-- Left side: Visuals and controls -->
+                    <div class="flex flex-col items-center justify-between">
+                         <div class="flex flex-col items-center">
+                            <div id="light-red" class="w-16 h-16 rounded-full bg-gray-600 border-2 border-black"></div>
+                            <div id="light-amber" class="w-16 h-16 rounded-full bg-gray-600 border-2 border-black my-2"></div>
+                            <div id="light-green" class="w-16 h-16 rounded-full bg-gray-600 border-2 border-black"></div>
+                        </div>
+                        <div class="text-center mt-4 w-full">
+                            <p class="text-sm mb-2">Sensor Input:</p>
+                            <button id="pedestrian-btn" class="btn w-full">🚶 Press for Pedestrian Crossing</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Right side: System Log -->
+                    <div>
+                        <h4 class="font-bold text-lg">System Log</h4>
+                        <div id="simulation-log" class="h-48 bg-black bg-opacity-50 rounded p-2 font-mono text-sm overflow-y-auto">
+                            <p>System Initialized. Awaiting command.</p>
+                        </div>
+                         <div class="text-center space-x-2 mt-4">
+                            <button id="start-sim-btn" class="btn">Start Sequence</button>
+                            <button id="reset-sim-btn" class="btn btn-secondary">Reset</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h3>Reflection Questions</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="reflection-q1-answer" class="font-semibold block mb-1">1. What sensor input did the system have to wait for before changing the lights for the pedestrian?</label>
+                            <textarea id="reflection-q1-answer" rows="2" class="w-full p-2 border rounded-lg"></textarea>
+                        </div>
+                        <div>
+                            <label for="reflection-q2-answer" class="font-semibold block mb-1">2. Why is a predictable, timed sequence important for a system like this?</label>
+                            <textarea id="reflection-q2-answer" rows="2" class="w-full p-2 border rounded-lg"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page 2: Drag & Drop Task -->
+            <div class="worksheet-page" data-name="Task 1">
+                <h2>Task 1: Sort the Characteristics</h2>
+                <p>Drag and drop the characteristics below into the correct category. You'll get XP for each correct placement!</p>
+                <div id="draggable-items-container" class="my-4 p-4 bg-gray-100 rounded-lg flex flex-wrap justify-center">
+                    <!-- Draggable items will be inserted here by JS -->
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-center">Embedded System</h3>
+                        <div id="embedded-zone" class="drop-zone p-4"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-center">General-Purpose Computer</h3>
+                        <div id="gp-zone" class="drop-zone p-4"></div>
+                    </div>
+                </div>
+                <div class="text-center mt-4">
+                    <button id="reset-dnd-btn" class="btn btn-secondary">Reset Task</button>
+                </div>
+            </div>
+
+            <!-- Page 3: General-Purpose Computer -->
+            <div class="worksheet-page" data-name="General-Purpose">
+                <h2>2. Task: Explore a General-Purpose Computer</h2>
+                <p>A general-purpose computer can run many different programs at once (multitasking). Let's simulate this. "Open" apps on the phone below and watch what happens to the system's resources.</p>
+                
+                <div class="grid md:grid-cols-2 gap-6 my-4 p-4 border rounded-lg">
+                    <!-- Left: Phone simulator -->
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-lg">
+                        <div id="phone-screen" class="bg-white h-80 rounded-lg p-2 flex flex-wrap gap-2 content-start">
+                            <button class="phone-app" data-ram="15" data-cpu="10">🌐 Browser</button>
+                            <button class="phone-app" data-ram="20" data-cpu="15">🎵 Music</button>
+                            <button class="phone-app" data-ram="25" data-cpu="25">📸 Photos</button>
+                            <button class="phone-app" data-ram="10" data-cpu="5">🧮 Calculator</button>
+                        </div>
+                    </div>
+                    <!-- Right: Resource monitor -->
+                    <div class="flex flex-col justify-center">
+                        <h3 class="mt-0">System Monitor</h3>
+                        <div>
+                            <label for="ram-usage" class="font-bold">RAM Usage:</label>
+                            <div class="w-full bg-gray-200 rounded-full h-6">
+                                <div id="ram-bar" class="bg-blue-600 h-6 rounded-full text-center text-white text-sm transition-all duration-500" style="width: 0%">0%</div>
+                            </div>
+                        </div>
+                         <div class="mt-4">
+                            <label for="cpu-usage" class="font-bold">CPU Load:</label>
+                            <div class="w-full bg-gray-200 rounded-full h-6">
+                                <div id="cpu-bar" class="bg-green-600 h-6 rounded-full text-center text-white text-sm transition-all duration-500" style="width: 0%">0%</div>
+                            </div>
+                        </div>
+                        <div id="gp-feedback" class="info-box info-box-yellow mt-4">
+                           Click an app to "open" it and see its impact on the system resources.
+                        </div>
+                        <div class="text-center mt-4">
+                            <button id="reset-gp-task" class="btn btn-secondary">Reset Task</button>
+                        </div>
+                    </div>
+                </div>
+                 <div class="mt-4">
+                    <h3>Reflection Questions</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="reflection-q3-answer" class="font-semibold block mb-1">1. What happened to the RAM and CPU usage as you opened more apps?</label>
+                            <textarea id="reflection-q3-answer" rows="2" class="w-full p-2 border rounded-lg"></textarea>
+                        </div>
+                        <div>
+                             <label for="reflection-q4-answer" class="font-semibold block mb-1">2. How does this demonstrate 'multitasking' and the need for 'large memory' in a general-purpose computer?</label>
+                             <textarea id="reflection-q4-answer" rows="2" class="w-full p-2 border rounded-lg"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Page 4: Fill in the Blanks -->
+            <div class="worksheet-page" data-name="Task 2">
+                <h2>Task 2: Fill in the Blanks</h2>
+                <p>Drag the words from the word bank to complete the sentences below. Be careful, there are some distractor words!</p>
+                <div id="fill-word-bank" class="my-4 p-4 bg-gray-100 rounded-lg flex flex-wrap justify-center items-center">
+                    <!-- Word bank items will be inserted here by JS -->
+                </div>
+                <div id="fill-prose" class="space-y-4 text-lg leading-loose p-4 border rounded-lg">
+                    <p>An embedded system is designed for a <span class="blank drop-zone" data-answer="dedicated">dedicated</span> function, whereas a general-purpose computer can handle <span class="blank drop-zone" data-answer="many">many</span> tasks. Because of this, embedded systems are typically <span class="blank drop-zone" data-answer="cheap">cheap</span> and more energy <span class="blank drop-zone" data-answer="efficient">efficient</span>. General-purpose computers need a lot of <span class="blank drop-zone" data-answer="memory">memory</span> and can perform <span class="blank drop-zone" data-answer="multitasking">multitasking</span>, unlike most embedded systems.</p>
+                </div>
+                <div class="text-center mt-6">
+                    <button id="reset-fill-btn" class="btn btn-secondary">Reset Task</button>
+                </div>
+            </div>
+            
+            <!-- Page 5: Smartwatch Debate -->
+            <div class="worksheet-page" data-name="Debate">
+                <h2>3. Real-World Context: The Smartwatch Debate</h2>
+                <p>A smartwatch is an interesting case. It has features of both system types. Read the arguments below.</p>
+                <div class="grid md:grid-cols-2 gap-4 my-4">
+                    <div class="p-4 bg-green-50 border-l-4 border-green-400 rounded-r-lg">
+                        <h3 class="text-green-700 mt-0">Argument: It's an Embedded System</h3>
+                        <ul class="list-disc list-inside">
+                            <li>It has a specific main purpose (timekeeping, notifications, health tracking).</li>
+                            <li>Its hardware is fixed and cannot be expanded.</li>
+                            <li>It's built into a larger item (a watch).</li>
+                        </ul>
+                    </div>
+                    <div class="p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
+                        <h3 class="text-blue-700 mt-0">Argument: It's a General-Purpose System</h3>
+                        <ul class="list-disc list-inside">
+                            <li>You can install new apps, giving it multiple functions.</li>
+                            <li>The operating system can be updated.</li>
+                            <li>It's a self-contained system, not part of something else.</li>
+                        </ul>
+                    </div>
+                </div>
+                <h3>What do you think?</h3>
+                <p>In the box below, explain whether you think a smartwatch is better described as an embedded system or a general-purpose computer. Justify your answer with at least two reasons. (XP awarded for using keywords like 'function', 'apps', 'hardware', 'update').</p>
+                <textarea id="smartwatch-answer" rows="5" class="w-full p-2 border rounded-lg" placeholder="A smartwatch is more like a... because..."></textarea>
+                <button id="submit-smartwatch-btn" class="btn mt-2">Submit Answer</button>
+                <div id="smartwatch-feedback" class="hidden mt-2 p-3 rounded-lg bg-gray-100"></div>
+            </div>
+
+            <!-- Page 6: Explorer Simulator -->
+            <div class="worksheet-page" id="explorer-sim-page" data-name="Explorer Sim">
+                <h2>4. Simulation: Embedded Systems Explorer</h2>
+                <p>Explore the different embedded systems in the car and the supermarket checkout below. Click on the glowing hotspots or items to learn more. When you're done, move to the next page to look at another example: an ATM.</p>
+                <div class="simulation-wrapper my-4">
+                    <div id="main-menu-explorer" class="view active">
+                        <h2 class="main-title">Embedded Systems Explorer</h2>
+                        <div class="explorer-menu">
+                            <div class="explorer-card" onclick="explorerSim.startExplorer('car')">
+                                <img src="https://images.vexels.com/media/users/3/242802/isolated/preview/cef1e58e886cdcb9a641cfe01455e13b-small-car-profile-semi-flat.png" alt="Car">
+                                <h3>Car Explorer</h3>
+                            </div>
+                            <div class="explorer-card" onclick="explorerSim.startExplorer('checkout')">
+                                <img src="https://heute-at-prod-images.imgix.net/2024/04/23/5f6918f1-76a0-4286-84ef-389dee38fae7.jpeg?rect=0%2C65%2C1254%2C705&auto=format" alt="Supermarket Checkout">
+                                <h3>Supermarket Checkout</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="car-explorer" class="view">
+                        <button class="back-button" onclick="explorerSim.showMainMenu()">&#8592; Back</button>
+                        <h2 class="main-title">Car Systems</h2>
+                        <div class="car-container">
+                            <img src="https://images.vexels.com/media/users/3/242802/isolated/preview/cef1e58e886cdcb9a641cfe01455e13b-small-car-profile-semi-flat.png" alt="Stylized illustration of a red car" class="car-image">
+                            <div id="hs-ecu" class="hotspot" title="Engine Control Unit" onclick="explorerSim.openModal('ecu')"></div>
+                            <div id="hs-abs" class="hotspot" title="Anti-lock Braking System" onclick="explorerSim.openModal('abs')"></div>
+                            <div id="hs-infotainment" class="hotspot" title="Infotainment System" onclick="explorerSim.openModal('infotainment')"></div>
+                            <div id="hs-airbag" class="hotspot" title="Airbag Control Unit" onclick="explorerSim.openModal('airbag')"></div>
+                            <div id="hs-climate" class="hotspot" title="Climate Control" onclick="explorerSim.openModal('climate')"></div>
+                        </div>
+                        <p style="text-align: center; color: var(--explorer-text-secondary); margin-top: 1rem;">Click on a glowing hotspot to explore a system.</p>
+                    </div>
+                    <div id="checkout-explorer" class="view">
+                        <button class="back-button" onclick="explorerSim.showMainMenu()">&#8592; Back</button>
+                        <h2 class="main-title">Supermarket Self-Checkout</h2>
+                        <div class="checkout-container">
+                            <div class="checkout-items">
+                                <h4>Items to Process</h4>
+                                <div class="item" id="item-cereal"></div>
+                                <div class="item" id="item-soda"></div>
+                                <div class="item" id="item-crisps"></div>
+                                <div class="item" id="item-apple"></div>
+                                <div class="item" id="item-bananas"></div>
+                            </div>
+                            <div class="checkout-machine">
+                                <div class="checkout-screen" id="checkout-screen-explorer"></div>
+                                <div class="peripheral-area scan-area" id="scan-area"><div class="scanner-light"></div>Barcode Scanner</div>
+                                <div class="peripheral-area" id="bagging-area">Bagging Area (Security Scale)</div>
+                                <div class="payment-area">
+                                    <button class="sim-button" id="pay-button" onclick="explorerSim.proceedToPayment()">Proceed to Payment</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="summary-view" class="view" style="text-align: center;">
+                        <h2 class="main-title">Key Concepts Review</h2>
+                        <p>You've explored all the embedded systems! Here are the main points for the exam:</p>
+                        <ul class="summary-list">
+                            <li>Has a specific purpose / it only performs one or a few tasks.</li>
+                            <li>Built within a larger mechanical or electrical device.</li>
+                            <li>Uses dedicated hardware and sensors.</li>
+                            <li>Has a microprocessor to run its software.</li>
+                            <li>Its operating system and software are generally built into ROM (Read-Only Memory).</li>
+                            <li>Its instructions generally do not change or get updated.</li>
+                        </ul>
+                        <button class="sim-button" onclick="explorerSim.showMainMenu()">Back to Menu</button>
+                    </div>
+                </div>
+                <div id="modal-overlay-explorer" class="modal-overlay">
+                    <div id="modal-content-explorer" class="modal-content">
+                        <div class="modal-title-container" id="modal-title-container-explorer"></div>
+                        <div id="modal-body-explorer" class="modal-body"></div>
+                        <div id="quiz-container-explorer" style="display: none;">
+                            <h4 id="quiz-question-explorer"></h4>
+                            <div id="quiz-options-explorer" class="quiz-options"></div>
+                            <p id="quiz-feedback-explorer" class="quiz-feedback"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page 7: ATM Simulator -->
+            <div class="worksheet-page" data-name="ATM Sim">
+                <h2>5. Simulation: ATM Machine</h2>
+                <p>An ATM is another device that relies on multiple embedded systems working together. Use the simulator below to perform a transaction and see which systems are involved.</p>
+                
+                <div class="atm-wrapper my-4">
+                    <div class="atm-main">
+                        <div id="atm-screen" class="atm-screen">
+                            <div class="atm-screen-content">Welcome to the Bank of CS.</div>
+                        </div>
+                        <div id="atm-keypad" class="atm-keypad">
+                            <!-- Keys will be generated by JS -->
+                        </div>
+                    </div>
+                    <div class="atm-slots">
+                        <div id="atm-card-slot" class="atm-slot">Card Reader</div>
+                        <div id="atm-cash-slot" class="atm-slot">Cash Dispenser</div>
+                        <div id="atm-receipt-slot" class="atm-slot">Receipt Printer</div>
+                        <button id="atm-reset-btn" class="btn btn-secondary mt-4 w-full">Reset ATM</button>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h3>Reflection Questions</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="reflection-q5-answer" class="font-semibold block mb-1">1. What is the single, dedicated function of the card reader system?</label>
+                            <textarea id="reflection-q5-answer" rows="2" class="w-full p-2 border rounded-lg"></textarea>
+                        </div>
+                        <div>
+                             <label for="reflection-q6-answer" class="font-semibold block mb-1">2. The cash dispenser must be extremely reliable. Why is this a critical embedded system?</label>
+                             <textarea id="reflection-q6-answer" rows="2" class="w-full p-2 border rounded-lg"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page 8: Exam Questions -->
+            <div class="worksheet-page" data-name="Exam Qs">
+                <h2>6. Practice Exam Questions</h2>
+                <p>Time to apply your knowledge. Answer the following questions as you would in an exam. Use the writing checker to get feedback on your structure and grammar.</p>
+                
+                <!-- Question 1 -->
+                <div class="my-6 p-4 border rounded-lg">
+                    <h3 class="mt-0">Question 1 (4 marks)</h3>
+                    <p class="font-semibold">Explain two reasons why a dishwasher is considered to have an embedded system.</p>
+                    <div id="writingScorer1">
+                        <div>
+                            <textarea id="studentAnswer1" rows="6" class="w-full p-2 border rounded-lg" placeholder="One reason is... Another reason is..."></textarea>
+                            <input type="hidden" id="keywords1" value="function,purpose,dedicated,control,sensor,hardware,valve,heater">
+                            <button id="analyzeBtn1" class="btn">Check My Writing</button>
+                        </div>
+                        <div id="resultsDashboard1" style="display: none;" class="mt-4 p-4 bg-gray-50 rounded-lg">
+                            <h4>Your Writing Feedback</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 items-center">
+                                <div>
+                                    <div id="scoreCircle1">
+                                        <span id="scoreValue1">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-span-2">
+                                    <h5 class="font-bold">Successes:</h5>
+                                    <ul id="successList1" class="text-sm"></ul>
+                                    <h5 class="font-bold mt-2">Areas for Improvement:</h5>
+                                    <ul id="improvementList1" class="text-sm"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary mt-2" data-mark-scheme="q1">Reveal Mark Scheme</button>
+                    <div id="mark-scheme-q1" class="hidden mt-2 p-3 rounded-lg bg-gray-100">
+                        <p><strong>Mark Scheme (4 marks):</strong></p>
+                        <ul class="list-disc list-inside">
+                            <li>It has a specific/dedicated function (1) e.g. to control the washing cycles (1).</li>
+                            <li>It is built into a larger device/the dishwasher itself (1) and is not a separate computer (1).</li>
+                            <li>It has dedicated hardware/sensors (1) to check water temperature or level (1).</li>
+                            <li>Its software is in ROM and is not changed (1) so it always performs the same job (1).</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+             <!-- Page 9: Exam Question 2 -->
+            <div class="worksheet-page" data-name="Exam Qs 2">
+                 <h2>6. Practice Exam Questions (Continued)</h2>
+                 <!-- Question 2 -->
+                 <div class="my-6 p-4 border rounded-lg">
+                    <h3 class="mt-0">Question 2 (6 marks)</h3>
+                    <p class="font-semibold">Compare the characteristics of an embedded system with those of a general-purpose computer.</p>
+                    <div id="writingScorer2">
+                        <div>
+                            <textarea id="studentAnswer2" rows="8" class="w-full p-2 border rounded-lg" placeholder="An embedded system differs from a general-purpose computer in several ways. For example..."></textarea>
+                            <input type="hidden" id="keywords2" value="purpose,function,multitasking,memory,ram,power,cost,cheap,expandability">
+                            <button id="analyzeBtn2" class="btn">Check My Writing</button>
+                        </div>
+                        <div id="resultsDashboard2" style="display: none;" class="mt-4 p-4 bg-gray-50 rounded-lg">
+                           <!-- Same structure as resultsDashboard1 -->
+                           <h4>Your Writing Feedback</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 items-center">
+                                <div>
+                                    <div id="scoreCircle2">
+                                        <span id="scoreValue2">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-span-2">
+                                    <h5 class="font-bold">Successes:</h5>
+                                    <ul id="successList2" class="text-sm"></ul>
+                                    <h5 class="font-bold mt-2">Areas for Improvement:</h5>
+                                    <ul id="improvementList2" class="text-sm"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary mt-2" data-mark-scheme="q2">Reveal Mark Scheme</button>
+                    <div id="mark-scheme-q2" class="hidden mt-2 p-3 rounded-lg bg-gray-100">
+                        <p><strong>Mark Scheme (6 marks):</strong> Award one mark for identifying a characteristic and a second for comparison. Max 6 marks.</p>
+                        <ul class="list-disc list-inside">
+                            <li><strong>Purpose:</strong> Embedded systems have a dedicated/single function, whereas general-purpose computers can perform many different tasks.</li>
+                            <li><strong>Memory:</strong> Embedded systems have small amounts of RAM/ROM, whereas general-purpose computers have large amounts of RAM and storage.</li>
+                            <li><strong>Power Consumption:</strong> Embedded systems are energy-efficient, whereas general-purpose computers consume much more power.</li>
+                            <li><strong>Cost:</strong> Embedded systems are cheap to produce, whereas general-purpose computers are more expensive.</li>
+                            <li><strong>Software:</strong> Embedded systems software is fixed (in ROM), whereas on a general-purpose computer you can install/update/remove software.</li>
+                            <li><strong>Multitasking:</strong> Embedded systems typically do not multitask, whereas general-purpose computers are designed for it.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page 10: Summary & Quiz -->
+            <div class="worksheet-page" data-name="Quiz">
+                <h2>7. Summary & Final Quiz</h2>
+                <h3>Key Takeaways</h3>
+                <ul class="list-disc list-inside">
+                    <li>An <strong>embedded system</strong> has a dedicated function and is part of a larger device. They are efficient, cheap, and reliable.</li>
+                    <li>A <strong>general-purpose computer</strong> can perform many tasks, is expandable, and requires more memory and power.</li>
+                    <li>Examples of embedded systems include traffic lights, dishwashers, and microwaves.</li>
+                    <li>Examples of general-purpose computers include laptops, smartphones, and PCs.</li>
+                </ul>
+
+                <h3 class="mt-6">Check Your Understanding</h3>
+                <p>Answer the questions below to test your knowledge. There's 10 XP for each correct answer!</p>
+                <div id="quiz-container"></div>
+                <button id="submit-quiz-btn" class="btn mt-4">Submit Quiz</button>
+                <div id="quiz-results" class="hidden mt-4 p-3 rounded-lg font-bold text-lg"></div>
+            </div>
+
+             <!-- Page 11: Extension -->
+            <div class="worksheet-page" data-name="Extension">
+                <h2>8. Extension Activity</h2>
+                <p>This activity goes beyond the main specification and is designed to make you think more deeply about the topic.</p>
+                <div class="p-4 bg-purple-50 border-l-4 border-purple-400 rounded-r-lg">
+                    <h3 class="text-purple-700 mt-0">The Internet of Things (IoT)</h3>
+                    <p>The Internet of Things (IoT) is a giant network of connected physical objects that are embedded with sensors, software, and other technologies for the purpose of connecting and exchanging data with other devices over the internet.</p>
+                    <p class="font-semibold mt-2">Discuss how embedded systems are fundamental to the functioning of the IoT. Consider devices like smart thermostats, connected cars, or agricultural sensors.</p>
+                    <textarea id="iot-answer" rows="6" class="w-full p-2 border rounded-lg mt-2" placeholder="Embedded systems are crucial for IoT because..."></textarea>
+                    <button id="submit-iot-btn" class="btn mt-2">Submit Answer</button>
+                    <div id="iot-feedback" class="hidden mt-2 p-3 rounded-lg bg-gray-100"></div>
+                </div>
+                
+                <h3 class="mt-8">Further Learning: Videos</h3>
+                <p>These videos provide more context on embedded systems. (Note: These are placeholders).</p>
+                <div class="grid md:grid-cols-2 gap-4 mt-4">
+                    <div class="p-4 border rounded-lg text-center bg-gray-200">Video 1 Placeholder</div>
+                    <div class="p-4 border rounded-lg text-center bg-gray-200">Video 2 Placeholder</div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Footer / Navigation -->
+        <footer class="p-4 bg-slate-100 border-t flex justify-between items-center">
+            <button id="prev-btn" class="btn btn-secondary" disabled>← Previous</button>
+            <div id="page-indicator" class="text-slate-600">Page 1 / 12</div>
+            <button id="next-btn" class="btn">Next →</button>
+        </footer>
+    </div>
+    
+    <div id="achievement-popup">Achievement Unlocked!</div>
+
+    <!-- Accessibility Controls -->
+    <div class="fixed top-4 left-4 z-50 bg-white p-2 rounded-lg shadow-lg space-y-2">
+        <h4 class="text-xs font-bold text-center">Accessibility</h4>
+        <button id="contrast-toggle" class="w-full text-xs p-1 border rounded">High Contrast</button>
+        <button id="font-toggle" class="w-full text-xs p-1 border rounded">Dyslexia Font</button>
+        <div class="flex justify-between">
+            <button id="font-decrease" class="text-xs p-1 border rounded">-A</button>
+            <button id="font-increase" class="text-xs p-1 border rounded">A+</button>
+        </div>
+    </div>
+    
+    <!-- Feedback Button & Modal -->
+    <div id="feedback-button" title="Report an issue or give feedback">?</div>
+    <div id="feedback-modal">
+        <div id="feedback-modal-content">
+            <h3 class="mt-0">Send Feedback</h3>
+            <p>Spotted a bug or have a suggestion? Let us know! Your feedback helps us improve.</p>
+            <textarea id="feedback-text" class="w-full p-2 border rounded-lg mt-2" rows="4" placeholder="Describe the issue or your idea..."></textarea>
+            <div class="mt-4 space-x-2">
+                 <a id="send-feedback-btn" class="btn">Send</a>
+                 <button id="close-feedback-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// --- GLOBAL STATE & CONFIG ---
+const appState = {
+    currentPage: 0,
+    xp: 0,
+    level: 1,
+    xpForNextLevel: 100,
+    achievements: new Set(),
+    completedTasks: new Set(),
+    fontSize: 16,
+};
+
+const pages = document.querySelectorAll('.worksheet-page');
+const totalPages = pages.length;
+
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    initNavigation();
+    initStarterActivity();
+    initTrafficLightSim();
+    initDragAndDrop();
+    initGeneralPurposeTask();
+    initFillInTheBlanks();
+    initSmartwatchTask();
+    initExplorerSim();
+    initAtmSimulator();
+    initExamQuestions();
+    initQuiz();
+    initExtension();
+    initAccessibility();
+    initAntiCheat();
+    initFeedback();
+    updateUI();
+});
+
+// --- NAVIGATION ---
+function initNavigation() {
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const quickNav = document.getElementById('quick-nav');
+
+    prevBtn.addEventListener('click', () => changePage(-1));
+    nextBtn.addEventListener('click', () => changePage(1));
+    
+    // Create quick nav buttons
+    pages.forEach((page, index) => {
+        const pageName = page.dataset.name || `Page ${index + 1}`;
+        const btn = document.createElement('button');
+        btn.textContent = pageName;
+        btn.className = 'text-xs md:text-sm px-2 py-1 rounded hover:bg-slate-500';
+        btn.onclick = () => showPage(index);
+        quickNav.appendChild(btn);
+    });
+}
+
+function showPage(pageIndex) {
+    appState.currentPage = pageIndex;
+    pages.forEach((page, index) => {
+        page.classList.toggle('active', index === pageIndex);
+    });
+    updateUI();
+}
+
+function changePage(direction) {
+    const newPage = appState.currentPage + direction;
+    if (newPage >= 0 && newPage < totalPages) {
+        showPage(newPage);
+    }
+}
+
+// --- UI UPDATES ---
+function updateUI() {
+    // Page indicator
+    document.getElementById('page-indicator').textContent = `Page ${appState.currentPage + 1} / ${totalPages}`;
+
+    // Prev/Next buttons
+    document.getElementById('prev-btn').disabled = appState.currentPage === 0;
+    document.getElementById('next-btn').disabled = appState.currentPage === totalPages - 1;
+    
+    // Quick nav active state
+    const quickNavButtons = document.querySelectorAll('#quick-nav button');
+    quickNavButtons.forEach((btn, index) => {
+        btn.classList.toggle('bg-blue-600', index === appState.currentPage);
+    });
+
+    // XP Bar
+    const xpPercentage = (appState.xp / appState.xpForNextLevel) * 100;
+    document.getElementById('xp-bar').style.width = `${xpPercentage}%`;
+    document.getElementById('xp-display').textContent = `(${appState.xp}/${appState.xpForNextLevel} XP)`;
+    document.getElementById('level-display').textContent = `Level ${appState.level}`;
+}
+
+// --- GAMIFICATION ---
+function addXp(amount, taskId) {
+    if (appState.completedTasks.has(taskId)) return; // Only award once
+    
+    appState.xp += amount;
+    appState.completedTasks.add(taskId);
+    console.log(`+${amount} XP for task ${taskId}. Total XP: ${appState.xp}`);
+
+    if (appState.xp >= appState.xpForNextLevel) {
+        levelUp();
+    }
+    updateUI();
+}
+
+function levelUp() {
+    if (appState.level >= 5) return;
+    appState.level++;
+    appState.xp -= appState.xpForNextLevel;
+    appState.xpForNextLevel = Math.round(appState.xpForNextLevel * 1.5); // Increase XP for next level
+    unlockAchievement(`Level ${appState.level} Reached!`);
+    
+    console.log(`Leveled up to ${appState.level}!`);
+}
+
+function unlockAchievement(name) {
+    if (appState.achievements.has(name)) return;
+    
+    appState.achievements.add(name);
+    const popup = document.getElementById('achievement-popup');
+    popup.textContent = `🏆 Achievement: ${name}`;
+    popup.style.bottom = '20px';
+    setTimeout(() => {
+        popup.style.bottom = '-100px';
+    }, 4000);
+}
+
+// --- STARTER ACTIVITY ---
+function initStarterActivity() {
+    const items = document.querySelectorAll('.starter-item');
+    const feedbackEl = document.getElementById('starter-feedback');
+    
+    items.forEach(item => {
+        item.addEventListener('click', () => {
+            if (appState.completedTasks.has('starter')) return;
+            
+            const selected = item.dataset.item;
+            let isCorrect = selected === 'Dishwasher';
+            
+            if (isCorrect) {
+                feedbackEl.className = 'mt-2 p-3 rounded-lg bg-green-100 text-green-800';
+                feedbackEl.innerHTML = '<strong>Correct!</strong> The dishwasher is an embedded system with a single purpose. The others are general-purpose computers that can run many different apps.';
+                addXp(10, 'starter');
+                unlockAchievement('Quick Thinker');
+            } else {
+                feedbackEl.className = 'mt-2 p-3 rounded-lg bg-red-100 text-red-800';
+                feedbackEl.innerHTML = `<strong>Not quite.</strong> While a ${selected} is a computer, it's a general-purpose one. The dishwasher is the odd one out because it's an embedded system.`;
+                appState.completedTasks.add('starter'); // Mark as attempted
+            }
+            feedbackEl.classList.remove('hidden');
+        });
+    });
+}
+
+// --- TRAFFIC LIGHT SIMULATION ---
+function initTrafficLightSim() {
+    const red = document.getElementById('light-red');
+    const amber = document.getElementById('light-amber');
+    const green = document.getElementById('light-green');
+    const log = document.getElementById('simulation-log');
+    const pedBtn = document.getElementById('pedestrian-btn');
+    let simInterval;
+    let pedestrianWaiting = false;
+
+    const sequence = [
+        { lights: ['red'], text: "PROCESS: State set to STOP.", duration: 2000 },
+        { lights: ['red', 'amber'], text: "PROCESS: State set to GET READY.", duration: 1500 },
+        { lights: ['green'], text: "OUTPUT: Green light ON. State: GO.", duration: 4000 },
+        { lights: ['amber'], text: "PROCESS: State set to PREPARE TO STOP.", duration: 1500 },
+    ];
+    
+    function logMessage(message, type = 'INFO') {
+        const p = document.createElement('p');
+        p.textContent = `[${new Date().toLocaleTimeString()}] ${type}: ${message}`;
+        if(type === 'INPUT') p.className = 'text-yellow-300';
+        if(type === 'OUTPUT') p.className = 'text-green-300';
+        log.appendChild(p);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function setLights(activeLights) {
+        red.style.backgroundColor = activeLights.includes('red') ? '#ef4444' : '#4b5563';
+        amber.style.backgroundColor = activeLights.includes('amber') ? '#f59e0b' : '#4b5563';
+        green.style.backgroundColor = activeLights.includes('green') ? '#22c55e' : '#4b5563';
+    }
+
+    function runSequence() {
+        let currentStep = 0;
+        document.getElementById('start-sim-btn').disabled = true;
+        logMessage("Starting traffic sequence.");
+
+        function nextStep() {
+            // Check for pedestrian input before going green
+            if (currentStep === 2 && pedestrianWaiting) {
+                 logMessage("INPUT: Pedestrian button pressed. Completing cycle before stop.");
+                 pedestrianWaiting = false; // Reset for next cycle
+                 pedBtn.disabled = true;
+                 pedBtn.textContent = '🚶 Crossing...';
+                 // Force sequence to red after this cycle
+                 setTimeout(() => {
+                    clearInterval(simInterval);
+                    setLights(['red']);
+                    logMessage('OUTPUT: Red light ON for pedestrian crossing.');
+                    setTimeout(() => {
+                        pedBtn.disabled = false;
+                        pedBtn.textContent = '🚶 Press for Pedestrian Crossing';
+                        runSequence(); // Restart sequence
+                    }, 4000);
+                 }, 5500); // green + amber duration
+            }
+            
+            if (currentStep >= sequence.length) {
+                currentStep = 0; // Loop back to start
+            }
+            const step = sequence[currentStep];
+            setLights(step.lights);
+            logMessage(step.text);
+            currentStep++;
+            simInterval = setTimeout(nextStep, step.duration);
+        }
+        nextStep();
+        addXp(25, 'traffic-sim');
+        unlockAchievement('System Controller');
+    }
+    
+    function resetSim() {
+        clearInterval(simInterval);
+        setLights([]);
+        log.innerHTML = '';
+        logMessage("System Reset. Awaiting command.");
+        document.getElementById('start-sim-btn').disabled = false;
+        pedestrianWaiting = false;
+        pedBtn.disabled = false;
+        pedBtn.textContent = '🚶 Press for Pedestrian Crossing';
+    }
+
+    pedBtn.addEventListener('click', () => {
+        if (document.getElementById('start-sim-btn').disabled){
+            logMessage("INPUT: Pedestrian button pressed.", "INPUT");
+            pedestrianWaiting = true;
+        } else {
+            logMessage("Start the sequence first.", "ERROR");
+        }
+    });
+
+    document.getElementById('start-sim-btn').addEventListener('click', runSequence);
+    document.getElementById('reset-sim-btn').addEventListener('click', resetSim);
+}
+
+// --- DRAG AND DROP TASK ---
+function initDragAndDrop() {
+    const items = [
+        { text: 'Dedicated function', category: 'embedded' },
+        { text: 'Small', category: 'embedded' },
+        { text: 'Cheap', category: 'embedded' },
+        { text: 'Energy efficient', category: 'embedded' },
+        { text: 'Multitasking', category: 'gp' },
+        { text: 'Large memory', category: 'gp' },
+        { text: 'Perform wide range of tasks', category: 'gp' },
+        { text: 'Expandability', category: 'gp' }
+    ];
+    
+    const itemsContainer = document.getElementById('draggable-items-container');
+    const embeddedZone = document.getElementById('embedded-zone');
+    const gpZone = document.getElementById('gp-zone');
+    let draggedItem = null;
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function setupDnd() {
+        itemsContainer.innerHTML = '';
+        embeddedZone.innerHTML = '';
+        gpZone.innerHTML = '';
+        shuffle(items);
+
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.textContent = item.text;
+            div.className = 'draggable';
+            div.draggable = true;
+            div.dataset.category = item.category;
+            itemsContainer.appendChild(div);
+        });
+
+        addDragListeners();
+    }
+
+    function addDragListeners() {
+        const draggables = document.querySelectorAll('.draggable');
+        draggables.forEach(draggable => {
+            draggable.addEventListener('dragstart', (e) => {
+                draggedItem = e.target;
+                setTimeout(() => e.target.style.opacity = '0.5', 0);
+            });
+            draggable.addEventListener('dragend', (e) => {
+                setTimeout(() => {
+                    e.target.style.opacity = '1';
+                    draggedItem = null;
+                }, 0);
+            });
+        });
+    }
+
+    [embeddedZone, gpZone].forEach(zone => {
+        zone.addEventListener('dragover', e => {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        });
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('drag-over');
+        });
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            if (draggedItem) {
+                const correctCategory = draggedItem.dataset.category;
+                const zoneCategory = zone.id.startsWith('embedded') ? 'embedded' : 'gp';
+                
+                if(correctCategory === zoneCategory) {
+                    draggedItem.draggable = false;
+                    draggedItem.classList.add('correct');
+                    zone.appendChild(draggedItem);
+                    addXp(5, `dnd-${draggedItem.textContent}`);
+                    if (document.querySelectorAll('.draggable.correct').length === items.length) {
+                        unlockAchievement('System Sorter');
+                    }
+                }
+                draggedItem = null;
+            }
+        });
+    });
+    
+    document.getElementById('reset-dnd-btn').addEventListener('click', setupDnd);
+    setupDnd();
+}
+
+// --- GENERAL PURPOSE COMPUTER TASK ---
+function initGeneralPurposeTask() {
+    const ramBar = document.getElementById('ram-bar');
+    const cpuBar = document.getElementById('cpu-bar');
+    const feedback = document.getElementById('gp-feedback');
+    const apps = document.querySelectorAll('.phone-app');
+    let currentRam = 0;
+    let currentCpu = 0;
+
+    function updateResources() {
+        ramBar.style.width = `${currentRam}%`;
+        ramBar.textContent = `${currentRam}%`;
+        cpuBar.style.width = `${currentCpu}%`;
+        cpuBar.textContent = `${currentCpu}%`;
+    }
+
+    function reset() {
+        currentRam = 0;
+        currentCpu = 0;
+        apps.forEach(app => app.disabled = false);
+        feedback.textContent = 'Click an app to "open" it and see its impact on the system resources.';
+        updateResources();
+    }
+    
+    apps.forEach(app => {
+        app.style.cssText = 'padding: 0.5rem; border: 1px solid #ccc; border-radius: 8px; cursor: pointer; background-color: #f0f0f0;';
+        app.addEventListener('click', () => {
+            const ram = parseInt(app.dataset.ram);
+            const cpu = parseInt(app.dataset.cpu);
+            
+            if (currentRam + ram > 100 || currentCpu + cpu > 100) {
+                feedback.textContent = "Not enough resources! You can't open more apps.";
+                return;
+            }
+            
+            currentRam += ram;
+            currentCpu += cpu;
+            app.disabled = true;
+            feedback.textContent = `You opened the ${app.textContent} app. Notice the increase in resource usage.`;
+            updateResources();
+            addXp(5, `gp-task-${app.textContent}`);
+            if(document.querySelectorAll('.phone-app:disabled').length === apps.length) {
+                unlockAchievement('Multitask Master');
+            }
+        });
+    });
+    
+    document.getElementById('reset-gp-task').addEventListener('click', reset);
+    reset();
+}
+
+
+// --- FILL IN THE BLANKS TASK ---
+function initFillInTheBlanks() {
+    const words = ['dedicated', 'many', 'cheap', 'efficient', 'memory', 'multitasking', 'expensive', 'slow'];
+    const wordBank = document.getElementById('fill-word-bank');
+    const dropZones = document.querySelectorAll('#fill-prose .drop-zone');
+    let draggedItem = null;
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function setupFillTask() {
+        wordBank.innerHTML = '';
+        dropZones.forEach(zone => {
+            zone.textContent = zone.dataset.answer; // keep text for sizing
+            zone.classList.remove('filled');
+        });
+
+        shuffle(words);
+        words.forEach(word => {
+            const div = document.createElement('div');
+            div.textContent = word;
+            div.className = 'draggable';
+            div.draggable = true;
+            div.dataset.word = word;
+            wordBank.appendChild(div);
+        });
+
+        addFillDragListeners();
+    }
+
+    function addFillDragListeners() {
+        const draggables = document.querySelectorAll('#fill-word-bank .draggable');
+        draggables.forEach(draggable => {
+            draggable.addEventListener('dragstart', (e) => {
+                draggedItem = e.target;
+            });
+        });
+    }
+
+    dropZones.forEach(zone => {
+        zone.addEventListener('dragover', e => e.preventDefault());
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            if (draggedItem && !zone.classList.contains('filled')) {
+                if (draggedItem.dataset.word === zone.dataset.answer) {
+                    zone.textContent = draggedItem.dataset.word;
+                    zone.classList.add('filled');
+                    draggedItem.classList.add('hidden');
+                    addXp(5, `fill-${zone.dataset.answer}`);
+                    if (document.querySelectorAll('#fill-prose .filled').length === 6) {
+                        unlockAchievement('Grammar Guru');
+                    }
+                }
+            }
+        });
+    });
+
+    document.getElementById('reset-fill-btn').addEventListener('click', setupFillTask);
+    setupFillTask();
+}
+
+
+// --- SMARTWATCH TASK ---
+function initSmartwatchTask() {
+    document.getElementById('submit-smartwatch-btn').addEventListener('click', () => {
+        const answer = document.getElementById('smartwatch-answer').value.toLowerCase();
+        const feedbackEl = document.getElementById('smartwatch-feedback');
+        const keywords = ['function', 'apps', 'hardware', 'update', 'purpose', 'fixed'];
+        let keywordsFound = new Set();
+        
+        keywords.forEach(kw => {
+            if (answer.includes(kw)) {
+                keywordsFound.add(kw);
+            }
+        });
+
+        if (answer.length < 50) {
+            feedbackEl.textContent = "Your answer is a bit short. Try to elaborate on your points.";
+        } else {
+            const xpGained = Math.min(keywordsFound.size * 5, 20); // Max 20 XP
+            feedbackEl.textContent = `Good analysis! You used ${keywordsFound.size} key terms. You've earned ${xpGained} XP.`;
+            addXp(xpGained, 'smartwatch-task');
+        }
+        feedbackEl.classList.remove('hidden');
+    });
+}
+
+// --- EXPLORER SIMULATOR ---
+function initExplorerSim() {
+    const explorerSim = (function() {
+        const container = document.getElementById('explorer-sim-page');
+        if (!container) return {};
+
+        const TOTAL_SYSTEMS = 10; // 5 car, 5 checkout
+        let completedSystems = new Set();
+        let checkoutTotal = 0;
+        let processedItems = new Set();
+
+        const systemData = {
+            'ecu': { title: "Engine Control Unit", quiz: { question: "An ECU is a critical system because:", options: ["It plays music.", "It requires a password.", "Its failure could be dangerous."], answer: 2 }},
+            'abs': { title: "Anti-lock Braking System", quiz: { question: "What is the primary, dedicated function of the ABS?", options: ["To make the car go faster.", "To prevent wheel lock-up for safety.", "To reduce fuel consumption."], answer: 1 }},
+            'infotainment': { title: "Infotainment System", quiz: { question: "Why are the programs for this system likely stored in ROM?", options: ["So the user can install new games.", "Because the core functions don't change and must be available on startup.", "Because ROM is cheaper than a hard drive."], answer: 1 }},
+            'airbag': { title: "Airbag Control Unit", quiz: { question: "The Airbag system must be reliable and fast because it is a:", options: ["Comfort system", "Real-time critical system", "Entertainment system"], answer: 1 }},
+            'climate': { title: "Climate Control", quiz: { question: "A Climate Control system is an example of an embedded system focused on:", options: ["Safety", "Engine performance", "User comfort"], answer: 2 }},
+            'scanner': { title: "Barcode Scanner", quiz: { question: "A barcode scanner has one dedicated task. This makes it:", options: ["A general-purpose computer", "A type of software", "An embedded system"], answer: 2 }},
+            'scales': { title: "Weighing Scales", quiz: { question: "The checkout uses the scales' sensor data to:", options: ["Calculate your change", "Verify the item in the bag matches the expected weight", "Print the receipt"], answer: 1 }},
+            'payment': { title: "Payment Terminal", quiz: { question: "The payment terminal is a separate, secure embedded system to protect:", options: ["The store's Wi-Fi", "Your financial data", "The receipt paper"], answer: 1 }},
+            'receipt': { title: "Receipt Printer", quiz: { question: "A receipt printer is a simple embedded system. Its main task is to:", options: ["Process card payments", "Control a thermal print head and a paper cutter", "Weigh items"], answer: 1 }},
+            'cash': { title: "Cash Handler", quiz: { question: "A note acceptor uses sensors to perform its dedicated task of:", options: ["Giving change", "Printing receipts", "Detecting counterfeit notes"], answer: 2 }}
+        };
+
+        const allViews = container.querySelectorAll('.view');
+        const modalOverlay = container.querySelector('#modal-overlay-explorer');
+        const modalTitleContainer = container.querySelector('#modal-title-container-explorer');
+        const modalBody = container.querySelector('#modal-body-explorer');
+        const quizContainer = container.querySelector('#quiz-container-explorer');
+        const quizQuestion = container.querySelector('#quiz-question-explorer');
+        const quizOptions = container.querySelector('#quiz-options-explorer');
+        const quizFeedback = container.querySelector('#quiz-feedback-explorer');
+        const checkoutScreen = container.querySelector('#checkout-screen-explorer');
+        const payButton = container.querySelector('#pay-button');
+
+        function showView(viewId) {
+            allViews.forEach(view => view.classList.toggle('active', view.id === viewId));
+            if (viewId === 'main-menu-explorer') resetSimulation();
+        }
+
+        function startExplorer(type) { showView(`${type}-explorer`); }
+        function showMainMenu() { showView('main-menu-explorer'); }
+        function closeModal() { modalOverlay.style.display = 'none'; }
+        modalOverlay.addEventListener('click', (e) => { if (e.target.id === 'modal-overlay-explorer') closeModal(); });
+        
+        function openModal(systemId, simulationHTML) {
+            const data = systemData[systemId];
+
+            if (!data) {
+                modalTitleContainer.innerHTML = ''; 
+                modalBody.innerHTML = simulationHTML; 
+                quizContainer.style.display = 'none';
+                modalBody.style.display = 'flex';
+                modalOverlay.style.display = 'flex';
+                return;
+            }
+            
+            modalTitleContainer.innerHTML = `<h3>${data.title}</h3>`;
+            modalBody.innerHTML = simulationHTML || `<p>Explore the ${data.title}.</p><button class="sim-button" onclick="explorerSim.showQuiz('${systemId}')">Start Quiz</button>`;
+            modalBody.style.display = 'flex';
+            
+            quizContainer.style.display = 'none';
+            quizContainer.dataset.systemId = systemId;
+            
+            if (data.quiz) {
+                quizQuestion.innerText = data.quiz.question;
+                quizOptions.innerHTML = '';
+                data.quiz.options.forEach((opt, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'quiz-option';
+                    btn.innerText = opt;
+                    btn.onclick = () => checkAnswer(systemId, index);
+                    quizOptions.appendChild(btn);
+                });
+            }
+            quizFeedback.innerText = '';
+            quizFeedback.className = 'quiz-feedback';
+            modalOverlay.style.display = 'flex';
+        }
+
+        function showQuiz(systemId) { modalBody.style.display = 'none'; quizContainer.style.display = 'block'; }
+
+        function checkAnswer(systemId, selectedIndex) {
+            const data = systemData[systemId];
+            if (selectedIndex === data.quiz.answer) {
+                quizFeedback.innerText = 'Correct!';
+                quizFeedback.className = 'quiz-feedback correct';
+                if (!completedSystems.has(systemId)) {
+                   completedSystems.add(systemId);
+                   addXp(10, `explorer-${systemId}`);
+                }
+                container.querySelectorAll(`.hotspot[onclick*="'${systemId}'"], .item[data-system-id="${systemId}"]`).forEach(el => el.classList.add('completed'));
+                
+                if (systemId === 'receipt') {
+                    setTimeout(() => {
+                        openModal('thank-you', '<h3>Thank You!</h3><p>Thank you for shopping with us.</p><button class="sim-button" onclick="explorerSim.showMainMenu()">Back to Menu</button>');
+                    }, 1500);
+                    return; 
+                }
+
+                setTimeout(() => {
+                    closeModal();
+                    if (completedSystems.size === TOTAL_SYSTEMS) {
+                        showView('summary-view');
+                        unlockAchievement('System Explorer');
+                    }
+                }, 1500);
+            } else {
+                quizFeedback.innerText = 'Not quite, try again.';
+                quizFeedback.className = 'quiz-feedback incorrect';
+            }
+        }
+        
+        function resetSimulation() {
+            completedSystems.clear();
+            processedItems.clear();
+            container.querySelectorAll('.completed').forEach(el => el.classList.remove('completed'));
+            checkoutTotal = 0;
+            if(checkoutScreen) checkoutScreen.innerHTML = '<div class="checkout-screen-item checkout-screen-total" id="checkout-screen-total-explorer"><span>Total</span><span>£0.00</span></div>';
+            if(payButton) payButton.disabled = true;
+            closeModal();
+        }
+
+        function proceedToPayment() {
+            if (processedItems.size < 5) {
+                const baggingArea = container.querySelector('#bagging-area');
+                baggingArea.classList.add('error');
+                openModal('security-error', `<h3>Error!</h3><p>Unexpected weight in bagging area. Please make sure all items are processed before paying.</p><button class="sim-button" onclick="explorerSim.closeModal()">OK</button></div>`);
+                setTimeout(() => baggingArea.classList.remove('error'), 1000);
+            } else {
+                openModal('payment-choice', `<h3>Select Payment</h3><p>How would you like to pay for your items?</p><div style="display:flex; justify-content:center; gap:1rem;"><button class="sim-button" onclick="explorerSim.interactWithCheckout('payment', 'pay')">Pay by Card</button><button class="sim-button" onclick="explorerSim.interactWithCheckout('cash', 'pay')">Pay by Cash</button></div>`);
+            }
+        }
+
+        function interactWithCheckout(item, type) {
+            const itemElId = `item-${item}`;
+            const itemEl = container.querySelector(`#${itemElId}`);
+            if (itemEl && itemEl.classList.contains('completed')) return;
+
+            if (type === 'pay') {
+                if(completedSystems.has(item)) return;
+                const systemId = item;
+                openModal(systemId, `<div><p>${getPaymentExplanation(systemId)}</p><p><strong>Task:</strong> Complete the quiz.</p><button class="sim-button" onclick="explorerSim.showQuiz('${systemId}')">Continue</button></div>`);
+                
+                const originalCheckAnswer = window.explorerSim.checkAnswer;
+                window.explorerSim.checkAnswer = (id, index) => {
+                    originalCheckAnswer(id, index);
+                    if ((id === 'payment' || id === 'cash') && systemData[id].quiz.answer === index) {
+                        setTimeout(() => {
+                            if (!completedSystems.has('receipt')) {
+                               openModal('receipt', `<div><p>The receipt printer has one job: print a summary of the transaction.</p><p><strong>Task:</strong> Complete the quiz.</p><button class="sim-button" onclick="explorerSim.showQuiz('receipt')">Continue</button></div>`);
+                            }
+                        }, 1800);
+                        window.explorerSim.checkAnswer = originalCheckAnswer;
+                    }
+                };
+                return;
+            }
+
+            const prices = {cereal: 3.50, soda: 1.50, crisps: 0.90, apple: 0.80, bananas: 1.20};
+            checkoutTotal += prices[item];
+            processedItems.add(item);
+            
+            const itemName = item.charAt(0).toUpperCase() + item.slice(1);
+            const totalLine = container.querySelector('#checkout-screen-total-explorer');
+            totalLine.insertAdjacentHTML('beforebegin', `<div class="checkout-screen-item"><span>${itemName}</span><span>£${prices[item].toFixed(2)}</span></div>`);
+            totalLine.innerHTML = `<span>Total</span><span>£${checkoutTotal.toFixed(2)}</span>`;
+            if (processedItems.size > 0) payButton.disabled = false;
+
+            const systemId = (type === 'scan') ? 'scanner' : 'scales';
+            itemEl.dataset.systemId = systemId;
+            itemEl.classList.add('completed');
+
+            if(type === 'scan'){
+                const scanArea = container.querySelector('#scan-area');
+                scanArea.classList.add('active');
+                setTimeout(() => scanArea.classList.remove('active'), 500);
+            }
+            
+            if (!completedSystems.has(systemId)) {
+                const explanation = type === 'scan' ? 'The barcode scanner reads the item\'s code with a laser. This is its only job.' : 'The security scales use sensors to measure the item\'s weight, verifying it matches what the system expects for the item you just processed.';
+                openModal(systemId, `<div><p>${explanation}</p><p><strong>Task:</strong> Complete the quiz.</p><button class="sim-button" onclick="explorerSim.showQuiz('${systemId}')">Continue</button></div>`);
+            }
+        }
+
+        function getPaymentExplanation(systemId) {
+            if (systemId === 'payment') return 'The Chip & PIN terminal is a highly secure, separate embedded system designed specifically to protect financial data during a transaction.';
+            if (systemId === 'cash') return 'The cash handler uses optical sensors and magnetic heads to validate notes, detect counterfeits, and command motors to dispense the correct change.';
+            return '';
+        }
+        
+        function initializeItems() {
+            const checkoutItems = [
+                { id: 'cereal', name: 'Cereal', type: 'scan', svg: `<svg viewBox="0 0 100 100"><rect x="20" y="10" width="60" height="80" fill="#f9a825" stroke="#000" stroke-width="2"/><text x="50" y="55" font-family="var(--explorer-font-sans)" font-size="12" fill="#000" text-anchor="middle">CEREAL</text></svg>` },
+                { id: 'soda', name: 'Soda', type: 'scan', svg: `<svg viewBox="0 0 100 100"><rect x="35" y="10" width="30" height="80" fill="#e53935" stroke="#000" stroke-width="2"/><rect x="30" y="15" width="40" height="15" fill="#fff"/><text x="50" y="25" fill="#e53935" font-size="10" text-anchor="middle">SODA</text></svg>` },
+                { id: 'crisps', name: 'Crisps', type: 'scan', svg: `<svg viewBox="0 0 100 100"><path d="M20 80 C 30 20, 70 20, 80 80 Z" fill="#ffca28" stroke="#000" stroke-width="2"/></svg>` },
+                { id: 'apple', name: 'Apple (by weight)', type: 'weigh', svg: `<svg viewBox="0 0 100 100"><circle cx="50" cy="55" r="30" fill="#d32f2f"/><path d="M60 25 Q 50 15 45 25" stroke="#6d4c41" stroke-width="4" fill="none"/></svg>` },
+                { id: 'bananas', name: 'Bananas (by weight)', type: 'weigh', svg: `<svg viewBox="0 0 100 100"><path d="M30 60 Q 50 20 70 60 Q 50 50 30 60 Z" fill="#fbc02d" stroke="#000" stroke-width="2"/></svg>` }
+            ];
+
+            checkoutItems.forEach(item => {
+                const itemDiv = container.querySelector(`#item-${item.id}`);
+                if(itemDiv) {
+                    itemDiv.innerHTML = `${item.svg}<span>${item.name}</span>`;
+                    itemDiv.onclick = () => interactWithCheckout(item.id, item.type);
+                }
+            });
+            resetSimulation();
+        }
+
+        initializeItems();
+
+        // Public API
+        return {
+            startExplorer, showMainMenu, openModal, showQuiz, checkAnswer, resetSimulation, interactWithCheckout, proceedToPayment, closeModal
+        };
+    })();
+    window.explorerSim = explorerSim;
+}
+
+
+// --- ATM SIMULATOR ---
+function initAtmSimulator() {
+    const screen = document.querySelector('#atm-screen .atm-screen-content');
+    const keypad = document.getElementById('atm-keypad');
+    const cardSlot = document.getElementById('atm-card-slot');
+    const cashSlot = document.getElementById('atm-cash-slot');
+    const receiptSlot = document.getElementById('atm-receipt-slot');
+    
+    let state = 'start'; // start, pin, menu, withdraw, balance
+    let pinEntry = '';
+
+    function updateScreen(message, showPin = false) {
+        let pinDisplay = showPin ? `<br><br>PIN: ${'*'.repeat(pinEntry.length)}` : '';
+        screen.innerHTML = `${message}${pinDisplay}`;
+    }
+
+    function resetAtm() {
+        state = 'start';
+        pinEntry = '';
+        cardSlot.classList.remove('active');
+        cashSlot.classList.remove('active');
+        receiptSlot.classList.remove('active');
+        updateScreen('Welcome to the Bank of CS.<br><br>Click the card reader to insert your card.');
+        addXp(5, 'atm-reset');
+    }
+
+    cardSlot.addEventListener('click', () => {
+        if (state === 'start') {
+            state = 'pin';
+            updateScreen('Please enter your 4-digit PIN.');
+            cardSlot.classList.add('active');
+            addXp(10, 'atm-insert-card');
+            unlockAchievement('Card Shark');
+        }
+    });
+
+    function handleKeyPress(key) {
+        if (state !== 'pin') return;
+
+        if (key === 'Enter') {
+            if (pinEntry.length === 4) {
+                state = 'menu';
+                updateScreen('PIN Accepted.<br><br>1. Withdraw<br>2. Balance');
+                addXp(10, 'atm-pin-correct');
+            } else {
+                updateScreen('Invalid PIN length. Please enter 4 digits.');
+                pinEntry = '';
+            }
+        } else if (key === 'Clear') {
+            pinEntry = '';
+            updateScreen('Please enter your 4-digit PIN.', true);
+        } else if (pinEntry.length < 4) {
+            pinEntry += key;
+            updateScreen('Please enter your 4-digit PIN.', true);
+        }
+    }
+
+    function handleTransaction(option) {
+        if (state !== 'menu') return;
+        if (option === '1') { // Withdraw
+            state = 'withdraw';
+            updateScreen('Dispensing cash...');
+            cashSlot.classList.add('active');
+            setTimeout(() => {
+                updateScreen('Please take your cash and receipt.');
+                receiptSlot.classList.add('active');
+                addXp(15, 'atm-withdraw');
+                unlockAchievement('Money Maker');
+            }, 2000);
+        } else if (option === '2') { // Balance
+             state = 'balance';
+             updateScreen('Printing balance...');
+             receiptSlot.classList.add('active');
+             setTimeout(() => {
+                updateScreen('Your balance is £420.69.<br>Please take your receipt.');
+                addXp(10, 'atm-balance');
+             }, 2000);
+        }
+    }
+    
+    // Build Keypad
+    keypad.innerHTML = ''; // Clear keypad before building
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'Clear', '0', 'Enter'].forEach(key => {
+        const btn = document.createElement('button');
+        btn.className = 'keypad-btn';
+        btn.textContent = key;
+        btn.addEventListener('click', () => {
+            if (state === 'pin') {
+                handleKeyPress(key);
+            } else if (state === 'menu') {
+                handleTransaction(key);
+            }
+        });
+        keypad.appendChild(btn);
+    });
+
+    document.getElementById('atm-reset-btn').addEventListener('click', resetAtm);
+
+    resetAtm();
+}
+
+// --- EXAM QUESTIONS ---
+function initExamQuestions() {
+    // Writing Scorer for Q1
+    document.getElementById('analyzeBtn1').addEventListener('click', () => {
+        analyzeWriting('1');
+    });
+
+    // Writing Scorer for Q2
+    document.getElementById('analyzeBtn2').addEventListener('click', () => {
+        analyzeWriting('2');
+    });
+
+    // Mark Scheme reveal
+    document.querySelectorAll('[data-mark-scheme]').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const qId = e.target.dataset.markScheme;
+            const scheme = document.getElementById(`mark-scheme-${qId}`);
+            const answer = document.getElementById(`studentAnswer${qId.replace('q', '')}`).value;
+
+            if(answer.length > 50) { // Require a reasonable attempt
+                scheme.classList.toggle('hidden');
+                addXp(10, `markscheme-view-${qId}`);
+            } else {
+                alert("Please write a more detailed answer before viewing the mark scheme.");
+            }
+        });
+    });
+}
+
+// --- WRITING SCORER LOGIC ---
+function analyzeWriting(questionId) {
+    const text = document.getElementById(`studentAnswer${questionId}`).value;
+    const keywords = document.getElementById(`keywords${questionId}`).value.split(',');
+    
+    let score = 100;
+    let successes = [];
+    let improvements = [];
+
+    if (!text.trim()) {
+        alert("Please enter some text to analyze.");
+        return;
+    }
+
+    const cleanedText = text.trim().replace(/\s+/g, ' ');
+    const sentences = cleanedText.match(/[^.!?]+[.!?]+/g) || [cleanedText]; // Handle single sentence without punctuation
+
+    // Helper functions for checks
+    const checkFirstLetterCapital = (txt) => {
+        const firstChar = txt.charAt(0);
+        return (firstChar === firstChar.toUpperCase() && isNaN(firstChar))
+            ? { scoreChange: 0, message: 'Started with a capital letter.' }
+            : { scoreChange: -15, message: 'Your answer should begin with a capital letter.' };
+    };
+
+    const checkSentenceCapitalization = (sentence) => {
+        const firstChar = sentence.trim().charAt(0);
+        return (firstChar !== firstChar.toUpperCase() || !isNaN(firstChar))
+            ? { scoreChange: -5, message: `A sentence beginning with "${sentence.substring(0,15)}..." needs a capital letter.` }
+            : { scoreChange: 0 };
+    };
+
+    const checkPunctuation = (sentence) => {
+        const lastChar = sentence.trim().slice(-1);
+        return ['.', '!', '?'].includes(lastChar)
+            ? { scoreChange: 0 }
+            : { scoreChange: -10, message: `The sentence "${sentence.substring(0,15)}..." seems to be missing end punctuation.` };
+    };
+
+    const checkSentenceLength = (sentence) => {
+        const wordCount = sentence.trim().split(' ').length;
+        return (wordCount < 4)
+            ? { scoreChange: -10, message: `The sentence "${sentence.trim()}" is very short. Try to write in full sentences.` }
+            : { scoreChange: 0 };
+    };
+    
+    const checkIThink = (txt) => {
+        return /i think/i.test(txt) ? { message: 'For formal answers, avoid "I think..." to sound more confident.' } : {};
+    };
+
+    const checkKeywords = (txt, kws) => {
+        const found = kws.filter(kw => new RegExp(`\\b${kw}\\b`, 'i').test(txt));
+        return found.length > 0 ? { message: `You included key terms like: ${found.join(', ')}.` } : {};
+    };
+
+    // Run checks
+    const firstLetterResult = checkFirstLetterCapital(cleanedText);
+    if (firstLetterResult.scoreChange < 0) {
+        score += firstLetterResult.scoreChange;
+        improvements.push(firstLetterResult.message);
+    } else {
+        successes.push(firstLetterResult.message);
+    }
+    
+    sentences.forEach(sentence => {
+        const capitalResult = checkSentenceCapitalization(sentence);
+        if(capitalResult.scoreChange < 0) { score += capitalResult.scoreChange; improvements.push(capitalResult.message); }
+
+        const punctuationResult = checkPunctuation(sentence);
+        if(punctuationResult.scoreChange < 0) { score += punctuationResult.scoreChange; improvements.push(punctuationResult.message); }
+        
+        const lengthResult = checkSentenceLength(sentence);
+        if(lengthResult.scoreChange < 0) { score += lengthResult.scoreChange; improvements.push(lengthResult.message); }
+    });
+
+    const iThinkResult = checkIThink(cleanedText);
+    if (iThinkResult.message) improvements.push(iThinkResult.message);
+    
+    const keywordResult = checkKeywords(cleanedText, keywords);
+    if (keywordResult.message) {
+        successes.push(keywordResult.message);
+        addXp(15, `writing-scorer-${questionId}`); // XP for using keywords
+    }
+    
+    score = Math.max(0, score);
+    if (score > 80 && text.length > 100) {
+        unlockAchievement('Essay Expert');
+    }
+
+    displayResults(questionId, score, successes, improvements);
+}
+
+function displayResults(id, score, successes, improvements) {
+    const scoreValue = document.getElementById(`scoreValue${id}`);
+    const scoreCircle = document.getElementById(`scoreCircle${id}`);
+    const successList = document.getElementById(`successList${id}`);
+    const improvementList = document.getElementById(`improvementList${id}`);
+    const dashboard = document.getElementById(`resultsDashboard${id}`);
+
+    successList.innerHTML = '';
+    improvementList.innerHTML = '';
+
+    scoreValue.textContent = score;
+    if (score > 75) scoreCircle.style.border = '5px solid var(--correct-color)';
+    else if (score > 50) scoreCircle.style.border = '5px solid #f59e0b';
+    else scoreCircle.style.border = '5px solid var(--incorrect-color)';
+
+    successes.forEach(msg => {
+        const li = document.createElement('li');
+        li.textContent = msg;
+        successList.appendChild(li);
+    });
+
+    if (improvements.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = 'Great work! No major issues found.';
+        li.style.color = 'var(--correct-color)';
+        improvementList.appendChild(li);
+    } else {
+        improvements.forEach(msg => {
+            const li = document.createElement('li');
+            li.textContent = msg;
+            improvementList.appendChild(li);
+        });
+    }
+
+    dashboard.style.display = 'block';
+    dashboard.style.opacity = 1;
+}
+
+// --- QUIZ ---
+function initQuiz() {
+    const quizData = [
+        {
+            question: "Which of the following is a key characteristic of an embedded system?",
+            options: ["Multitasking", "Expandability", "Dedicated function", "Large memory"],
+            answer: "Dedicated function"
+        },
+        {
+            question: "A laptop is an example of a...",
+            options: ["Control system", "Embedded system", "General-purpose computer", "Microprocessor"],
+            answer: "General-purpose computer"
+        },
+        {
+            question: "Why are embedded systems generally energy efficient?",
+            options: ["They have large power supplies", "They are designed for one specific, optimized task", "They use the fastest CPUs available", "They run many programs at once"],
+            answer: "They are designed for one specific, optimized task"
+        },
+        {
+            question: "The software for an embedded system is typically stored in...",
+            options: ["RAM", "An SSD", "ROM", "The Cloud"],
+            answer: "ROM"
+        },
+        {
+            question: "What does 'multitasking' mean in the context of computers?",
+            options: ["Having multiple users", "Running more than one program at once", "Connecting to the internet", "Having a small amount of memory"],
+            answer: "Running more than one program at once"
+        },
+        {
+            question: "Which device is most likely to contain an embedded system?",
+            options: ["A gaming PC", "A microwave oven", "A web server", "A tablet"],
+            answer: "A microwave oven"
+        }
+    ];
+
+    const quizContainer = document.getElementById('quiz-container');
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+    
+    shuffle(quizData).forEach((q, index) => {
+        const questionEl = document.createElement('div');
+        questionEl.className = 'my-4';
+        questionEl.innerHTML = `<p class="font-semibold">${index + 1}. ${q.question}</p>`;
+        
+        const optionsContainer = document.createElement('div');
+        shuffle(q.options).forEach(option => {
+            optionsContainer.innerHTML += `
+                <label class="block my-1">
+                    <input type="radio" name="q${index}" value="${option}" class="mr-2">
+                    ${option}
+                </label>
+            `;
+        });
+        questionEl.appendChild(optionsContainer);
+        quizContainer.appendChild(questionEl);
+    });
+
+    document.getElementById('submit-quiz-btn').addEventListener('click', () => {
+        let score = 0;
+        quizData.forEach((q, index) => {
+            const selected = document.querySelector(`input[name="q${index}"]:checked`);
+            if (selected && selected.value === q.answer) {
+                score++;
+                addXp(10, `quiz-q${index}`);
+            }
+        });
+        
+        const resultsEl = document.getElementById('quiz-results');
+        resultsEl.textContent = `You scored ${score} out of ${quizData.length}.`;
+        resultsEl.classList.remove('hidden');
+        
+        if (score === quizData.length) {
+            unlockAchievement('Quiz Whiz');
+        }
+    });
+}
+
+// --- EXTENSION ---
+function initExtension() {
+    document.getElementById('submit-iot-btn').addEventListener('click', () => {
+        const answer = document.getElementById('iot-answer').value.toLowerCase();
+        const feedbackEl = document.getElementById('iot-feedback');
+        const keywords = ['sensor', 'data', 'connect', 'specific', 'network', 'efficient'];
+        let score = 0;
+        
+        keywords.forEach(kw => {
+            if (answer.includes(kw)) {
+                score++;
+            }
+        });
+
+        if (answer.length < 50) {
+            feedbackEl.textContent = "Great start! Try to expand on how these systems work together in a network.";
+        } else {
+            const xpGained = Math.min(score * 6, 30);
+            feedbackEl.textContent = `Excellent thinking! You've connected the concepts well and used ${score} key terms. You've earned ${xpGained} XP.`;
+            addXp(xpGained, 'iot-task');
+            unlockAchievement('Forward Thinker');
+        }
+        feedbackEl.classList.remove('hidden');
+    });
+}
+
+// --- ACCESSIBILITY ---
+function initAccessibility() {
+    const body = document.body;
+    document.getElementById('contrast-toggle').addEventListener('click', () => body.classList.toggle('high-contrast'));
+    document.getElementById('font-toggle').addEventListener('click', () => body.classList.toggle('dyslexia-font'));
+    document.getElementById('font-decrease').addEventListener('click', () => {
+        appState.fontSize = Math.max(12, appState.fontSize - 1);
+        body.style.fontSize = `${appState.fontSize}px`;
+    });
+    document.getElementById('font-increase').addEventListener('click', () => {
+        appState.fontSize = Math.min(24, appState.fontSize + 1);
+        body.style.fontSize = `${appState.fontSize}px`;
+    });
+}
+
+
+// --- ANTI-CHEAT ---
+function initAntiCheat() {
+    document.querySelectorAll('textarea').forEach(el => {
+        el.addEventListener('paste', e => {
+            e.preventDefault();
+            const shameMessage = document.getElementById('shame-message');
+            shameMessage.style.display = 'block';
+            setTimeout(() => { shameMessage.style.opacity = '1'; }, 10); // Fade in
+            
+            setTimeout(() => {
+                shameMessage.style.opacity = '0';
+                setTimeout(() => { shameMessage.style.display = 'none'; }, 500); // Wait for fade out
+            }, 3000);
+
+            unlockAchievement('Learned a Hard Lesson');
+        });
+    });
+}
+
+
+// --- FEEDBACK ---
+function initFeedback() {
+    const modal = document.getElementById('feedback-modal');
+    const feedbackBtn = document.getElementById('feedback-button');
+    const closeBtn = document.getElementById('close-feedback-btn');
+    const sendBtn = document.getElementById('send-feedback-btn');
+
+    feedbackBtn.addEventListener('click', () => {
+        modal.style.display = 'block';
+    });
+    closeBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+    window.addEventListener('click', (event) => {
+        if (event.target == modal) {
+            modal.style.display = 'none';
+        }
+    });
+
+    sendBtn.addEventListener('click', () => {
+        const feedbackText = document.getElementById('feedback-text').value;
+        if (!feedbackText) {
+            alert('Please enter some feedback before sending.');
+            return;
+        }
+        
+        const currentPageName = pages[appState.currentPage].dataset.name || `Page ${appState.currentPage + 1}`;
+        const subject = `Feedback on Interactive Worksheet: ${currentPageName}`;
+        const body = `Hello,\n\nI have the following feedback regarding the "${currentPageName}" section of the worksheet:\n\n---\n${feedbackText}\n---\n\n(This email was generated automatically.)`;
+
+        sendBtn.href = `mailto:millingtond@mgs.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        
+        unlockAchievement('Bug Hunter');
+        addXp(20, 'feedback-sent');
+        
+        // Let the default mailto link action proceed
+        setTimeout(() => {
+             modal.style.display = 'none';
+             document.getElementById('feedback-text').value = '';
+        }, 500);
+    });
+}
+
+</script>
+</body>
+</html>
+```
