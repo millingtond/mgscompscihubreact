@@ -1,134 +1,178 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
-import WorksheetViewer from './WorksheetViewer';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 
-const StudentWorkView = ({ student, onClose, db, auth }) => {
-    const [assignments, setAssignments] = useState([]);
-    const [selectedAssignment, setSelectedAssignment] = useState(null);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(null); // State for confirmation modal
+function StudentWorkView({ student, classData, db, navigateTo }) {
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-    // Effect to fetch the student's assignments in real-time
-    useEffect(() => {
-        if (student) {
-            const q = query(collection(db, "assignments"), where("studentId", "==", student.id));
-            const unsubscribe = onSnapshot(q, (querySnapshot) => {
-                const studentAssignments = [];
-                querySnapshot.forEach((doc) => {
-                    studentAssignments.push({ id: doc.id, ...doc.data() });
-                });
-                setAssignments(studentAssignments);
-            });
-            return () => unsubscribe();
-        }
-    }, [student, db]);
+  // State for the marking modal
+  const [markingAssignment, setMarkingAssignment] = useState(null);
+  const [mark, setMark] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-    // Function to handle the deletion of an assignment
-    const handleDeleteAssignment = async (assignmentId) => {
-        if (!assignmentId) return;
-        try {
-            await deleteDoc(doc(db, 'assignments', assignmentId));
-            console.log("Assignment deleted successfully");
-        } catch (error) {
-            console.error("Error deleting assignment: ", error);
-            // In a real app, you'd show a more user-friendly error message
-        }
-        setShowDeleteConfirm(null); // Close the confirmation modal after deletion
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      if (!student || !student.studentUID) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const assignmentsQuery = query(collection(db, "assignments"), where("studentUID", "==", student.studentUID));
+        const assignmentsSnapshot = await getDocs(assignmentsQuery);
+        
+        const assignmentsWithDetails = await Promise.all(
+          assignmentsSnapshot.docs.map(async (assignmentDoc) => {
+            const assignmentData = assignmentDoc.data();
+            const worksheetRef = doc(db, "worksheets", assignmentData.worksheetId);
+            const worksheetSnap = await getDoc(worksheetRef);
+
+            return {
+              id: assignmentDoc.id,
+              ...assignmentData,
+              worksheetTitle: worksheetSnap.exists() ? worksheetSnap.data().title : "Unknown Worksheet",
+              worksheetTopic: worksheetSnap.exists() ? worksheetSnap.data().topic : "N/A",
+            };
+          })
+        );
+        
+        setAssignments(assignmentsWithDetails);
+        setError('');
+      } catch (err) {
+        console.error("Error fetching student assignments:", err);
+        setError("Could not load assignments for this student.");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    // If an assignment is selected, show the worksheet viewer
-    if (selectedAssignment) {
-        return (
-            <WorksheetViewer
-                assignment={selectedAssignment}
-                onClose={() => setSelectedAssignment(null)}
-                db={db}
-                auth={auth}
-                isTeacherView={true}
-            />
-        );
+    fetchAssignments();
+  }, [student, db]);
+
+  const handleOpenMarkingModal = (assignment) => {
+    setMarkingAssignment(assignment);
+    setMark(assignment.mark || '');
+    setFeedback(assignment.feedback || '');
+  };
+
+  const handleCloseMarkingModal = () => {
+    setMarkingAssignment(null);
+    setMark('');
+    setFeedback('');
+  };
+
+  const handleSaveMark = async () => {
+    if (!markingAssignment) return;
+    setIsSaving(true);
+    try {
+      const assignmentRef = doc(db, "assignments", markingAssignment.id);
+      await updateDoc(assignmentRef, {
+        mark: mark,
+        feedback: feedback,
+        status: 'Completed' // Automatically mark as completed
+      });
+
+      // Update local state to reflect changes immediately
+      setAssignments(prev => prev.map(a => 
+        a.id === markingAssignment.id ? { ...a, mark, feedback, status: 'Completed' } : a
+      ));
+
+      handleCloseMarkingModal();
+    } catch (err) {
+      console.error("Error saving mark:", err);
+      alert("Failed to save mark. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
+  };
 
-    // Main modal view showing the list of assignments
-    return (
-        <>
-            <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-40">
-                <div className="bg-gray-900 text-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-2xl mx-4">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-2xl font-bold text-white">
-                            Work for <span className="text-cyan-400">{student.username}</span>
-                        </h3>
-                        <button
-                            onClick={onClose}
-                            className="text-gray-400 hover:text-white transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
+  return (
+    <>
+      <div className="bg-white p-8 rounded-lg shadow-md">
+        <button onClick={() => navigateTo('class', classData)} className="mb-6 bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">
+          &larr; Back to {classData.className}
+        </button>
+        <h2 className="text-3xl font-bold mb-2">Work for: {student.username}</h2>
+        <p className="text-gray-600 mb-6">Viewing all assigned worksheets.</p>
 
-                    <div className="mt-4 space-y-4">
-                        <h4 className="font-semibold text-lg border-b border-gray-700 pb-2">Assigned Work</h4>
-                        {assignments.length > 0 ? (
-                            <ul className="divide-y divide-gray-800 max-h-96 overflow-y-auto pr-2">
-                                {assignments.map((assignment) => (
-                                    <li key={assignment.id} className="py-3 flex justify-between items-center">
-                                        <div>
-                                            <p className="font-medium">{assignment.worksheetName}</p>
-                                            <p className="text-sm text-gray-400">Status: {assignment.status}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button 
-                                                onClick={() => setSelectedAssignment(assignment)} 
-                                                className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-transform transform hover:scale-105"
-                                            >
-                                                View & Mark
-                                            </button>
-                                            {/* NEW: Delete button for each assignment */}
-                                            <button 
-                                                onClick={() => setShowDeleteConfirm(assignment)} 
-                                                className="text-sm bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-transform transform hover:scale-105"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-gray-400 italic">No work assigned yet.</p>
-                        )}
-                    </div>
+        {loading && <p>Loading assignments...</p>}
+        {error && <p className="text-red-500">{error}</p>}
+
+        {!loading && assignments.length === 0 && (
+          <p>This student has not been assigned any worksheets yet.</p>
+        )}
+
+        {!loading && assignments.length > 0 && (
+          <div className="space-y-4">
+            {assignments.map(assignment => (
+              <div key={assignment.id} className="border rounded-lg p-4 flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-lg">{assignment.worksheetTitle}</p>
+                  <p className="text-sm text-gray-500">{assignment.worksheetTopic}</p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
+                      assignment.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                      assignment.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                  }`}>
+                      {assignment.status}
+                  </span>
+                  <button onClick={() => handleOpenMarkingModal(assignment)} className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">
+                    Mark / Feedback
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Marking Modal */}
+      {markingAssignment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl">
+            <h3 className="text-2xl font-bold mb-4">Marking: {markingAssignment.worksheetTitle}</h3>
+            
+            <div className="mb-6">
+                <h4 className="font-semibold text-gray-700 mb-2">Student's Answers</h4>
+                <div className="bg-gray-50 p-4 rounded-md border max-h-60 overflow-y-auto">
+                    {Object.keys(markingAssignment.studentWork || {}).length > 0 ? (
+                        <pre className="whitespace-pre-wrap font-sans text-sm">
+                            {JSON.stringify(markingAssignment.studentWork, null, 2)}
+                        </pre>
+                    ) : (
+                        <p className="text-gray-500">No answers have been saved by the student yet.</p>
+                    )}
                 </div>
             </div>
 
-            {/* NEW: Confirmation Modal for Deletion */}
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex justify-center items-center z-50">
-                    <div className="bg-gray-800 border border-red-500 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-                        <h3 className="text-lg font-bold text-red-400 mb-4">Are you sure?</h3>
-                        <p className="mb-6 text-gray-300">
-                            Do you really want to delete the assignment "{showDeleteConfirm.worksheetName}" for this student? This action cannot be undone.
-                        </p>
-                        <div className="flex justify-end gap-4">
-                            <button 
-                                onClick={() => setShowDeleteConfirm(null)} 
-                                className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={() => handleDeleteAssignment(showDeleteConfirm.id)} 
-                                className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-                            >
-                                Delete Assignment
-                            </button>
-                        </div>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label htmlFor="mark" className="block text-sm font-medium text-gray-700">Mark / Grade</label>
+                    <input type="text" id="mark" value={mark} onChange={e => setMark(e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md"/>
                 </div>
-            )}
-        </>
-    );
-};
+            </div>
+
+            <div>
+                <label htmlFor="feedback" className="block text-sm font-medium text-gray-700">Feedback</label>
+                <textarea id="feedback" value={feedback} onChange={e => setFeedback(e.target.value)} rows="4" className="mt-1 block w-full p-2 border border-gray-300 rounded-md"></textarea>
+            </div>
+
+            <div className="mt-8 flex justify-end space-x-4">
+              <button onClick={handleCloseMarkingModal} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+              <button onClick={handleSaveMark} disabled={isSaving} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-green-400">
+                {isSaving ? 'Saving...' : 'Save Mark & Feedback'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 export default StudentWorkView;
