@@ -13,6 +13,8 @@ import StudentLogin from './components/StudentLogin';
 import StudentDashboard from './components/StudentDashboard';
 import StudentWorkView from './components/StudentWorkView';
 import WorksheetViewer from './components/WorksheetViewer';
+import MarkingView from './components/MarkingView';
+import MarkbookView from './components/MarkbookView'; // --- NEW: Import MarkbookView
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_API_KEY,
@@ -34,15 +36,12 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState('landing');
   
-  // Teacher navigation state
   const [teacherPage, setTeacherPage] = useState('dashboard');
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   
-  // Student navigation state
   const [studentPage, setStudentPage] = useState('dashboard');
   
-  // Shared state for viewing worksheets/assignments
   const [selectedWorksheet, setSelectedWorksheet] = useState(null);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
 
@@ -76,10 +75,11 @@ function App() {
     });
   };
 
-  const navigateTeacherTo = (page, classData = null, studentData = null, worksheetData = null) => {
+  const navigateTeacherTo = (page, classData = null, studentData = null, worksheetData = null, assignmentData = null) => {
     if (classData) setSelectedClass(classData);
     if (studentData) setSelectedStudent(studentData);
     if (worksheetData) setSelectedWorksheet(worksheetData);
+    if (assignmentData) setSelectedAssignment(assignmentData);
     setTeacherPage(page);
   };
 
@@ -117,9 +117,12 @@ function App() {
         </header>
         <main className="container mx-auto p-6">
           {teacherPage === 'dashboard' && <TeacherDashboard navigateTo={navigateTeacherTo} auth={auth} db={db} />}
-          {teacherPage === 'class' && <ClassView classData={selectedClass} navigateTo={navigateTeacherTo} db={db} />}
+{teacherPage === 'class' && <ClassView classData={selectedClass} navigateTo={navigateTeacherTo} db={db} auth={auth} />}
           {teacherPage === 'worksheets' && <ManageWorksheets db={db} storage={storage} navigateTo={navigateTeacherTo} />}
           {teacherPage === 'student-work' && <StudentWorkView student={selectedStudent} classData={selectedClass} db={db} navigateTo={navigateTeacherTo} />}
+          {teacherPage === 'marking' && <MarkingView assignment={selectedAssignment} classData={selectedClass} db={db} navigateTo={navigateTeacherTo} />}
+          {/* --- NEW: Render MarkbookView when teacherPage is 'markbook' --- */}
+          {teacherPage === 'markbook' && <MarkbookView classData={selectedClass} db={db} navigateTo={navigateTeacherTo} />}
           {teacherPage === 'worksheet-viewer' && <WorksheetViewer worksheet={selectedWorksheet} db={db} isStudentView={false} navigateTo={navigateTeacherTo} returnRoute="worksheets" />}
         </main>
       </div>

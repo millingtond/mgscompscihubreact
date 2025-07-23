@@ -1,0 +1,106 @@
+see these instructions for how I want you to create A Quiz and then I'm going to give you A lot Of flash card information And I would like you to create A Big Quiz using math information.
+// INSTRUCTIONS
+// - Each question block must start with [START Q] on a new line.
+// - The question text must start with "Question: ".
+// - Each multiple-choice option must start with "O: " on a new line.
+// - The correct answer must be specified with "A: " followed by the index of the correct option (starting from 0).
+// - Do not include [END Q] markers, the parser handles this automatically.
+[START Q]
+Question: What does CPU stand for?
+O: Central Processing Unit
+O: Computer Personal Unit
+O: Central Power Unit
+O: Central Process Unit
+A: 0
+[START Q]
+Question: Which of these is an example of volatile memory?
+O: SSD
+O: HDD
+O: RAM
+O: ROM
+A: 2
+flashcard info
+Stored program concept
+Instructions and data are both stored within memory during execution. 
+Von Neumann architecture uses stored program concept - both the Instructions and data are stored in the same memory system. 
+Fetch
+The phase of the instruction cycle that retrieves an instruction from main memory
+Decode
+This phase of the instruction cycle determines what task the CPU must perform...
+...Control unit looks up the instruction in it's instruction set
+e.g. how to carry out a LOAD 5 instruction
+Execute
+The phase of the instruction cycle where the task is carried out...
+...which could be an arithmetic, shift, logic or memory operation
+Fetch-Execute Cycle
+Also known as the instruction cycle, the complete process of retrieving an instruction from store, decoding it and carrying it out
+FDE cycle - tasks
+An instruction is fetched from memory
+The instruction is then decoded
+The decoded instruction is then executed so that the CPU performs continuously
+The process is repeated
+The program counter is incremented
+The instruction is transferred to the MDR
+The address of the instruction to be fetched is placed in the MAR
+How the CPU and RAM work together
+Instructions / programs(currently running) / data are stored in the RAM…
+these are fetched from the RAM by the CPU / Processor...
+… where the instructions are executed / instructions are processed / data is processed
+Instruction
+A single operation, one of these is executed each time the CPU performs the fetch-execute cycle
+Main memory
+Also known as RAM or Primary Storage, this is where data and instructions are stored in the Von Neumann architecture
+Process
+Computers take input, and produce output. This is what happens in between, which needs a CPU
+Central Processing Unit
+This component repeatedly fetches, decodes and executes instructions.
+Often abbreviated to CPU
+Architecture
+The design of a computer, including the way its components are organised and the rules that make them work together. 
+Von Neumann invented a type of this
+Von Neumann Architecture
+Basic design of most modern computers.
+Consists of a Central Processing Unit (CPU), Memory (where both instructions and data are held), Input/Output (I/O), and a Control Unit.
+More than one clock cycle may be required to execute a single instruction
+The CPU can access instructions and read/write data at the same time
+There is a common system bus (wire) for data and instruction transfer
+Memory Address Register
+A register that stores a single address/location where data will be read/written/accessed/fetched from/to memory
+Memory Data Register
+A register that stores the data/instruction that has been fetched/read from memory
+OR
+the data that is to be written to memory
+Accumulator
+A register used with the ALU...
+...that stores the result of process/calculation
+Program Counter
+A register...
+...that holds a single address...
+...of the next instruction to be fetched/run during the fetch-execute cycle
+Registers
+The collection of tiny areas of extremely fast memory located in the CPU
+...each with a specific purpose, where data or control information is stored temporarily.
+...Examples are the MAR, MDR, PC and Accumulator
+NOTE - Control unit/ALU are not registers
+Cache
+A small amount of fast memory built on the CPU
+Stores commonly used instructions
+....faster to access than RAM
+Arithmetic Logic Unit (ALU)
+Perform mathematical operations in the CPU
+E.g. "ADD 3 to Accumulator", binary shifts like "Shift left 2 bits"
+E.g. logical comparisons such as "Compare Accumulator with location 30".
+Bus
+Any of three communication pathways between the CPU and RAM in the Von Neumann architecture
+There is one for addresses, one for data and one for control signals
+Control Unit
+Component of the CPU which controls the flow of data around the CPU
+...communication between the CPU and input and output devices,
+...decodes and executes instructions
+Not studied (1)
+You haven't studied these terms yet.
+Select this one
+Clock
+Synchronises all activity in the CPU // ensures that each instruction is processed at a consistent and predictable rate.
+It regulates the speed at which instructions are completed
+make sure that everything is covered in The quiz
