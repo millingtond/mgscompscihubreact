@@ -1,18 +1,9 @@
-import { useState } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
+import React, { useState } from 'react';
+import { getAuth, signInWithCustomToken } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// Helper function to hash a string using SHA-256
-const sha256 = async (str) => {
-    const textAsBuffer = new TextEncoder().encode(str);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', textAsBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
-const studentsCollectionPath = 'students';
-
-function StudentLogin({ db, auth, setLoggedInStudent, setAuthState }) {
+// The component now only needs `setAuthState` and `app` as props.
+function StudentLogin({ setAuthState, app }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,92 +11,91 @@ function StudentLogin({ db, auth, setLoggedInStudent, setAuthState }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (!username || !password) {
+      setError('Please enter a username and password.');
+      return;
+    }
     setLoading(true);
     setError('');
 
-    if (!username || !password) {
-      setError('Please enter a username and password.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const studentsRef = collection(db, studentsCollectionPath);
-      const q = query(studentsRef, where("username", "==", username.trim()));
-      const querySnapshot = await getDocs(q);
+      const functions = getFunctions(app);
+      const auth = getAuth(app);
+      const loginStudent = httpsCallable(functions, 'loginStudent');
 
-      if (querySnapshot.empty) {
-        setError('Invalid username or password.');
-        setLoading(false);
-        return;
-      }
+      const result = await loginStudent({ username, password });
+      const { token } = result.data;
 
-      const studentDoc = querySnapshot.docs[0];
-      const studentData = studentDoc.data();
-      
-      // FIX: Trim whitespace from the password before hashing
-      const hashedPassword = await sha256(password.trim());
+      // Sign in with the custom token. The onAuthStateChanged listener in App.jsx
+      // will automatically handle the redirect to the dashboard.
+      await signInWithCustomToken(auth, token);
 
-      // --- For Debugging (uncomment if login still fails) ---
-      // console.log("Password from input:", password.trim());
-      // console.log("Hashed input:", hashedPassword);
-      // console.log("Stored hash:", studentData.password);
-      // ----------------------------------------------------
-
-      if (studentData.password === hashedPassword) {
-        await signInAnonymously(auth);
-        setLoggedInStudent({ id: studentDoc.id, ...studentData });
-      } else {
-        setError('Invalid username or password.');
-      }
+      // No longer need to call onLogin here.
 
     } catch (err) {
-      console.error("Login error:", err);
-      setError('An error occurred during login. Please try again.');
-    } finally {
-      setLoading(false);
+      console.error('Login Error:', err);
+      setError(err.message || 'An unknown error occurred.');
+      setLoading(false); // Stop loading on error
     }
+    // Don't set loading to false on success, as the page will redirect.
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-100">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-center text-gray-800">Student Login</h2>
-        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">Username</label>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
+        <div className="text-center mb-6">
+            <h2 className="text-3xl font-bold text-gray-800">Student Portal</h2>
+            <p className="text-gray-500">Welcome back!</p>
+        </div>
+        <form onSubmit={handleLogin}>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+              Username
+            </label>
             <input
-              type="text"
               id="username"
+              type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
-              required
+              className="shadow-sm appearance-none border rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g. quiet-tiger-797"
+              autoComplete="username"
             />
           </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+              Password
+            </label>
             <input
-              type="password"
               id="password"
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
-              required
+              className="shadow-sm appearance-none border rounded w-full py-3 px-4 text-gray-700 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="******************"
+              autoComplete="current-password"
             />
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full px-4 py-2 font-bold text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:shadow-outline disabled:bg-green-400"
-          >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
+          {error && <p className="bg-red-100 text-red-700 text-sm p-3 rounded-md mb-4">{error}</p>}
+          <div className="flex items-center justify-between">
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline w-full transition-colors duration-300 disabled:bg-blue-300"
+            >
+              {loading ? 'Signing In...' : 'Sign In'}
+            </button>
+          </div>
+           <div className="text-center mt-4">
+                <button 
+                    type="button" 
+                    onClick={() => setAuthState('landing')} 
+                    className="text-sm text-blue-600 hover:underline"
+                >
+                    &larr; Back to main page
+                </button>
+            </div>
         </form>
-         <button onClick={() => setAuthState('landing')} className="w-full text-sm text-center text-gray-600 hover:underline mt-4">
-            Back to role selection
-        </button>
       </div>
     </div>
   );

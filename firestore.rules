@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    function isTeacher() {
+      return exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
+    }
+
+    function isStudent() {
+      return request.auth.token.studentUID != null;
+    }
+
+    // --- Collection Rules ---
+    match /teachers/{teacherId} {
+      allow read, write: if request.auth.uid == teacherId;
+    }
+
+    match /classes/{classId} {
+      allow read, create, update, delete: if isTeacher();
+    }
+
+    match /students/{studentId} {
+      allow read: if request.auth.uid == studentId || isTeacher();
+      allow write: if isTeacher();
+    }
+
+    match /worksheets/{worksheetId} {
+      allow read: if isStudent() || isTeacher();
+      allow create, update, delete: if isTeacher();
+    }
+    
+    match /announcements/{announcementId} {
+      allow read: if isTeacher() || request.auth.token.classId == resource.data.classId;
+      allow create, update, delete: if isTeacher();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isTeacher() || request.auth.token.studentUID == resource.data.studentUID;
+      allow create, delete: if isTeacher();
+      allow update: if isTeacher() || (request.auth.token.studentUID == resource.data.studentUID && request.writeFields.hasOnly(['studentWork', 'status']));
+    }
+  }
+}

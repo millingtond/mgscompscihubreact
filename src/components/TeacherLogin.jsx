@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 
-function TeacherLogin({ auth, setAuthState }) {
+// The component now accepts `app` and `setAuthState` to align with the new App.jsx structure.
+function TeacherLogin({ app, setAuthState }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,9 +20,10 @@ function TeacherLogin({ auth, setAuthState }) {
     }
 
     try {
-      // Use Firebase's built-in email/password authentication
+      // Get the auth instance from the main app object.
+      const auth = getAuth(app);
       await signInWithEmailAndPassword(auth, email, password);
-      // The onAuthStateChanged listener in App.jsx will handle successful login
+      // The onAuthStateChanged listener in App.jsx will now handle the successful login automatically.
     } catch (err) {
       console.error("Teacher login error:", err.code);
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {

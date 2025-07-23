@@ -1,52 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
-function StudentDashboard({ student, setLoggedInStudent, db, navigateTo }) {
+function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
   const [assignments, setAssignments] = useState([]);
-  const [announcements, setAnnouncements] = useState([]); // --- NEW: State for announcements
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!student || !student.studentUID) {
-        setLoading(false);
-        return;
-      }
       try {
-        setLoading(true);
+        const auth = getAuth(app);
+        const currentUser = auth.currentUser;
 
-        // --- Fetch assignments (existing logic) ---
-        const assignmentsQuery = query(collection(db, "assignments"), where("studentUID", "==", student.studentUID));
+        if (!currentUser) {
+          setError("Authentication session not found. Please log in again.");
+          setLoading(false);
+          return;
+        }
+        
+        const idTokenResult = await currentUser.getIdTokenResult(true);
+        const claims = idTokenResult.claims;
+        console.log("Verified user auth claims:", claims);
+        
+        const studentUIDFromClaims = claims.studentUID;
+        const classIdFromClaims = claims.classId;
+
+        if (!studentUIDFromClaims) {
+          setError("Could not verify student identity from auth token. Please log in again.");
+          setLoading(false);
+          return;
+        }
+        
+        setLoading(true);
+        
+        const assignmentsQuery = query(collection(db, "assignments"), where("studentUID", "==", studentUIDFromClaims));
         const assignmentsSnapshot = await getDocs(assignmentsQuery);
         
-        let assignmentsWithWorksheetData = [];
-        if (!assignmentsSnapshot.empty) {
-            assignmentsWithWorksheetData = await Promise.all(
-              assignmentsSnapshot.docs.map(async (assignmentDoc) => {
-                const assignmentData = assignmentDoc.data();
+        const assignmentsWithWorksheetData = await Promise.all(
+          assignmentsSnapshot.docs.map(async (assignmentDoc) => {
+            const assignmentData = assignmentDoc.data();
+            if (assignmentData.worksheetId) {
+                // FIX: Corrected a typo here from `worksId` to `worksheetId`
                 const worksheetRef = doc(db, "worksheets", assignmentData.worksheetId);
                 const worksheetSnap = await getDoc(worksheetRef);
                 if (worksheetSnap.exists()) {
                   return {
-                    id: assignmentDoc.id,
-                    ...assignmentData,
-                    worksheet: { id: worksheetSnap.id, ...worksheetSnap.data() },
+                      id: assignmentDoc.id,
+                      ...assignmentData,
+                      worksheet: { id: worksheetSnap.id, ...worksheetSnap.data() },
                   };
                 }
-                return null;
-              })
-            );
-        }
+            }
+            return null;
+          })
+        );
         setAssignments(assignmentsWithWorksheetData.filter(a => a !== null));
 
-        // --- NEW: Fetch recent announcements for the student's class ---
-        if (student.classId) {
+        if (classIdFromClaims) {
             const announcementsQuery = query(
                 collection(db, "announcements"), 
-                where("classId", "==", student.classId),
+                where("classId", "==", classIdFromClaims),
                 orderBy("createdAt", "desc"),
-                limit(5) // Get the 5 most recent announcements
+                limit(5)
             );
             const announcementsSnapshot = await getDocs(announcementsQuery);
             const announcementsList = announcementsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -62,7 +79,7 @@ function StudentDashboard({ student, setLoggedInStudent, db, navigateTo }) {
       }
     };
     fetchData();
-  }, [student, db]);
+  }, [student, db, app]);
 
   const getButtonInfo = (status) => {
     switch (status) {
@@ -80,27 +97,26 @@ function StudentDashboard({ student, setLoggedInStudent, db, navigateTo }) {
   return (
     <div className="min-h-screen bg-gray-100">
        <header className="bg-white shadow-md">
-            <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
-              <h1 className="text-xl font-bold text-gray-800">MGS Student Portal</h1>
-              <div>
-                <span className="text-gray-700 mr-4">Welcome, {student.username}!</span>
-                <button
-                  onClick={() => setLoggedInStudent(null)}
-                  className="px-4 py-2 bg-red-500 text-white rounded-md text-sm font-medium hover:bg-red-600"
-                >
-                  Logout
-                </button>
-              </div>
-            </nav>
+          <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
+            <h1 className="text-xl font-bold text-gray-800">MGS Student Portal</h1>
+            <div>
+              <span className="text-gray-700 mr-4">Welcome, {student.username}!</span>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-500 text-white rounded-md text-sm font-medium hover:bg-red-600"
+              >
+                Logout
+              </button>
+            </div>
+          </nav>
         </header>
         <main className="container mx-auto p-6">
             
             {loading && <p>Loading your dashboard...</p>}
             {error && <p className="text-red-500">{error}</p>}
 
-            {/* --- NEW: Announcements Section --- */}
             {!loading && (
-                 <div className="mb-8">
+                <div className="mb-8">
                     <h2 className="text-3xl font-bold mb-4">Class Announcements</h2>
                     <div className="bg-white p-6 rounded-lg shadow-md space-y-4">
                         {announcements.length > 0 ? (
@@ -121,8 +137,8 @@ function StudentDashboard({ student, setLoggedInStudent, db, navigateTo }) {
 
             <h2 className="text-3xl font-bold mb-6">Your Assignments</h2>
 
-            {!loading && assignments.length === 0 && (
-                 <div className="bg-white p-8 rounded-lg shadow-md text-center">
+            {!loading && assignments.length === 0 && !error && (
+                <div className="bg-white p-8 rounded-lg shadow-md text-center">
                     <p className="text-gray-600">You have no assignments yet. Check back later!</p>
                 </div>
             )}

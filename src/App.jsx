@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+// Component Imports
 import LandingPage from './components/LandingPage';
 import TeacherLogin from './components/TeacherLogin';
 import TeacherDashboard from './components/TeacherDashboard';
@@ -14,7 +15,7 @@ import StudentDashboard from './components/StudentDashboard';
 import StudentWorkView from './components/StudentWorkView';
 import WorksheetViewer from './components/WorksheetViewer';
 import MarkingView from './components/MarkingView';
-import MarkbookView from './components/MarkbookView'; // --- NEW: Import MarkbookView
+import MarkbookView from './components/MarkbookView';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_API_KEY,
@@ -42,64 +43,83 @@ function App() {
   
   const [studentPage, setStudentPage] = useState('dashboard');
   
-  const [selectedWorksheet, setSelectedWorksheet] = useState(null);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
 
+  // --- THIS IS THE KEY CHANGE ---
+  // This single listener now handles all authentication and determines the user type.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user && !user.isAnonymous) {
-        const teacherRef = doc(db, "teachers", user.uid);
-        const teacherSnap = await getDoc(teacherRef);
-        if (teacherSnap.exists()) {
-          setTeacherUser(user);
-          setAuthState('teacher-dashboard');
+      setLoading(true);
+      if (user) {
+        // A user is signed in. Now, check if they are a student or a teacher.
+        const idTokenResult = await user.getIdTokenResult();
+        
+        // Check for the custom student claim we created in the login function.
+        if (idTokenResult.claims.studentUID) {
+          // This is a student.
+          const studentRef = doc(db, "students", user.uid);
+          const studentSnap = await getDoc(studentRef);
+          if (studentSnap.exists()) {
+            setLoggedInStudent(studentSnap.data());
+            setTeacherUser(null); // Ensure no teacher is logged in
+          } else {
+            // Student auth exists but no DB record, sign out to be safe.
+            await signOut(auth);
+          }
         } else {
-          await signOut(auth);
-          setTeacherUser(null);
+          // This is a teacher.
+          const teacherRef = doc(db, "teachers", user.uid);
+          const teacherSnap = await getDoc(teacherRef);
+          if (teacherSnap.exists()) {
+            setTeacherUser(user);
+            setLoggedInStudent(null); // Ensure no student is logged in
+          } else {
+            // Teacher auth exists but no DB record, sign out.
+            await signOut(auth);
+          }
         }
       } else {
+        // No user is signed in.
         setTeacherUser(null);
+        setLoggedInStudent(null);
+        sessionStorage.removeItem('studentUser');
+        setAuthState('landing');
       }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
+  // The handleStudentLogin function is no longer needed, as onAuthStateChanged handles everything.
+
   const handleLogout = () => {
-    signOut(auth).then(() => {
-      setTeacherUser(null);
-      setLoggedInStudent(null);
-      setAuthState('landing');
-      setStudentPage('dashboard');
-      setTeacherPage('dashboard');
-    });
+    signOut(auth); // This will trigger onAuthStateChanged to clear state and redirect.
   };
 
-  const navigateTeacherTo = (page, classData = null, studentData = null, worksheetData = null, assignmentData = null) => {
+  const navigateTeacherTo = (page, classData = null, studentData = null, assignmentData = null) => {
     if (classData) setSelectedClass(classData);
     if (studentData) setSelectedStudent(studentData);
-    if (worksheetData) setSelectedWorksheet(worksheetData);
     if (assignmentData) setSelectedAssignment(assignmentData);
     setTeacherPage(page);
   };
 
   const navigateStudentTo = (page, assignmentData = null) => {
-      if (assignmentData) {
-        setSelectedAssignment(assignmentData);
-        setSelectedWorksheet(assignmentData.worksheet);
-      }
-      setStudentPage(page);
+    if (assignmentData) {
+      setSelectedAssignment(assignmentData);
+    }
+    setStudentPage(page);
   };
 
-  if (loading && authState === 'landing') {
+  if (loading) {
     return <div className="flex items-center justify-center h-screen"><div className="text-xl">Loading...</div></div>;
   }
   
+  // The rendering logic remains the same, but it's now driven by a more reliable state.
   if (loggedInStudent) {
-      if (studentPage === 'worksheet-viewer') {
-          return <WorksheetViewer assignment={selectedAssignment} db={db} isStudentView={true} navigateTo={navigateStudentTo} returnRoute="dashboard" />
-      }
-      return <StudentDashboard student={loggedInStudent} setLoggedInStudent={handleLogout} db={db} navigateTo={navigateStudentTo} />
+    if (studentPage === 'worksheet-viewer') {
+      return <WorksheetViewer assignment={selectedAssignment} db={db} navigateTo={navigateStudentTo} returnRoute="dashboard" app={app} />
+    }
+    return <StudentDashboard student={loggedInStudent} handleLogout={handleLogout} db={db} navigateTo={navigateStudentTo} app={app} />
   }
 
   if (teacherUser) {
@@ -117,26 +137,28 @@ function App() {
         </header>
         <main className="container mx-auto p-6">
           {teacherPage === 'dashboard' && <TeacherDashboard navigateTo={navigateTeacherTo} auth={auth} db={db} />}
-{teacherPage === 'class' && <ClassView classData={selectedClass} navigateTo={navigateTeacherTo} db={db} auth={auth} />}
+          {teacherPage === 'class' && <ClassView classData={selectedClass} navigateTo={navigateTeacherTo} db={db} auth={auth} />}
           {teacherPage === 'worksheets' && <ManageWorksheets db={db} storage={storage} navigateTo={navigateTeacherTo} />}
           {teacherPage === 'student-work' && <StudentWorkView student={selectedStudent} classData={selectedClass} db={db} navigateTo={navigateTeacherTo} />}
           {teacherPage === 'marking' && <MarkingView assignment={selectedAssignment} classData={selectedClass} db={db} navigateTo={navigateTeacherTo} />}
-          {/* --- NEW: Render MarkbookView when teacherPage is 'markbook' --- */}
           {teacherPage === 'markbook' && <MarkbookView classData={selectedClass} db={db} navigateTo={navigateTeacherTo} />}
-          {teacherPage === 'worksheet-viewer' && <WorksheetViewer worksheet={selectedWorksheet} db={db} isStudentView={false} navigateTo={navigateTeacherTo} returnRoute="worksheets" />}
+          {teacherPage === 'worksheet-viewer' && <WorksheetViewer assignment={selectedAssignment} db={db} navigateTo={navigateTeacherTo} returnRoute="worksheets" app={app} />}
         </main>
       </div>
     );
   }
   
+  // The login flow is now simpler.
   switch(authState) {
-      case 'teacher-login':
-          return <TeacherLogin auth={auth} setAuthState={setAuthState} />;
-      case 'student-login':
-          return <StudentLogin db={db} auth={auth} setLoggedInStudent={setLoggedInStudent} setAuthState={setAuthState} />;
-      case 'landing':
-      default:
-          return <LandingPage setAuthState={setAuthState} />;
+    case 'teacher-login':
+      // TeacherLogin now only needs `app` and `setAuthState`
+      return <TeacherLogin app={app} setAuthState={setAuthState} />;
+    case 'student-login':
+      // StudentLogin no longer needs an `onLogin` prop.
+      return <StudentLogin setAuthState={setAuthState} app={app} />;
+    case 'landing':
+    default:
+      return <LandingPage setAuthState={setAuthState} />;
   }
 }
 
