@@ -10,7 +10,7 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
 
   useEffect(() => {
     // Do not fetch data if the student prop is not available
-    if (!student) {
+    if (!student || !student.uid) {
         setLoading(false);
         return;
     }
@@ -46,7 +46,6 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
         const assignmentsWithWorksheetData = await Promise.all(
           assignmentsSnapshot.docs.map(async (assignmentDoc) => {
             const assignmentData = assignmentDoc.data();
-            // --- BUG FIX --- Corrected property from `worksId` to `worksheetId`
             if (assignmentData.worksheetId) {
                 const worksheetRef = doc(db, "worksheets", assignmentData.worksheetId);
                 const worksheetSnap = await getDoc(worksheetRef);
@@ -61,7 +60,9 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
             return null;
           })
         );
-        setAssignments(assignmentsWithWorksheetData.filter(a => a !== null));
+        
+        const finalAssignments = assignmentsWithWorksheetData.filter(a => a !== null);
+        setAssignments(finalAssignments);
 
         if (classIdFromClaims) {
             const announcementsQuery = query(
@@ -84,7 +85,7 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
       }
     };
     fetchData();
-  }, [student, db, app]);
+  }, [student?.uid, db, app]); // FIX: Depend on the stable student.uid instead of the whole object
 
   const getButtonInfo = (status) => {
     switch (status) {
@@ -99,8 +100,14 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
     }
   };
 
-  // --- FIX --- Add a guard clause to prevent rendering if the student prop is missing.
-  // This prevents the "cannot read properties of undefined" error.
+  const handleNavigateToWorksheet = (assignment) => {
+    if (!assignment.worksheet) {
+        setError("Cannot open this assignment because its worksheet data is missing.");
+        return;
+    }
+    navigateTo('worksheet-viewer', assignment);
+  }
+
   if (!student) {
       return (
           <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -116,7 +123,6 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
             <h1 className="text-xl font-bold text-gray-800">MGS Student Portal</h1>
             <div>
               <span className="text-gray-700 mr-4">Welcome, {student.username}!</span>
-              {/* --- NEW --- Button to navigate to the progress dashboard */}
               <button
                 onClick={() => navigateTo('progress')}
                 className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 mr-4"
@@ -172,8 +178,8 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
                         return (
                             <div key={assignment.id} className="bg-white p-6 rounded-lg shadow-md flex flex-col justify-between">
                                 <div>
-                                    <p className="text-sm font-semibold text-blue-600">{assignment.worksheet.topic}</p>
-                                    <h3 className="text-xl font-bold mt-1">{assignment.worksheet.title}</h3>
+                                    <p className="text-sm font-semibold text-blue-600">{assignment.worksheet?.topic || 'No Topic'}</p>
+                                    <h3 className="text-xl font-bold mt-1">{assignment.worksheet?.title || 'Untitled Worksheet'}</h3>
                                     <div className="mt-4 flex items-center">
                                         <span className="text-sm font-medium text-gray-600 mr-2">Status:</span>
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -188,7 +194,7 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
                                 </div>
                                 <div className="mt-6">
                                     <button 
-                                        onClick={() => navigateTo('worksheet-viewer', assignment)}
+                                        onClick={() => handleNavigateToWorksheet(assignment)}
                                         className={`w-full block text-center text-white font-bold py-2 px-4 rounded ${buttonInfo.style}`}
                                     >
                                         {buttonInfo.text}

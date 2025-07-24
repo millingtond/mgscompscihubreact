@@ -1,0 +1,249 @@
+Objective:
+To adapt a standalone, interactive HTML worksheet so that it can be embedded in our platform, allowing for seamless saving and loading of student work directly to our Firestore database.
+
+Core Mechanism:
+The integration works via a communication bridge between the parent React application (which holds the student's data) and the interactive HTML worksheet running inside an <iframe>.
+
+Loading Data: When the worksheet loads, the parent application injects a JavaScript object (window.MGS_HUB_SAVED_STATE) containing the student's previously saved answers directly into the HTML's <head>. The worksheet's internal script then reads this object to restore the student's progress.
+
+Saving Data: As the student interacts with the worksheet, an internal script periodically gathers all current answers and states into a single JSON object. It then sends this object to the parent application using window.parent.postMessage(). The parent application listens for this message and saves the data to the database.
+
+Step-by-Step Integration Instructions:
+You are to modify a provided interactive HTML file. Add the following scripts and logic to make it compatible with our platform.
+
+Step 1: Add the Main Integration Script Block
+Place the following <script> block just before the closing </body> tag of the HTML file. This will be the foundation for our saving and loading logic.
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- MGS Hub Integration: Platform Communication Logic ---
+
+    // The interval (in milliseconds) for auto-saving work. 20 seconds is a safe default.
+    const SAVE_INTERVAL = 20000; 
+
+    /**
+     * Gathers the state of ALL interactive elements into a single JSON object.
+     * THIS FUNCTION IS THE MOST IMPORTANT PART TO CUSTOMIZE FOR EACH WORKSHEET.
+     */
+    function getWorksheetStateForServer() {
+        const state = {
+            inputs: {}, // For standard text fields, textareas, checkboxes
+            interactiveStates: {} // For custom interactive elements like quizzes, matching, etc.
+        };
+
+        // 1. Save standard inputs and textareas that have an ID.
+        document.querySelectorAll('textarea[id], input[id]').forEach(el => {
+            // Ensure we don't save fields from feedback forms, etc.
+            if (el.id === 'feedback-text') return; 
+
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                state.inputs[el.id] = el.checked;
+            } else {
+                state.inputs[el.id] = el.value;
+            }
+        });
+
+        // 2. *** CUSTOM STATE SAVING FOR INTERACTIVE ELEMENTS GOES HERE ***
+        // This is where you will add logic specific to the new worksheet.
+        // For example, to save a quiz:
+        /*
+        const quizContainer = document.getElementById('unique-quiz-id');
+        if (quizContainer) {
+            const selectedButton = quizContainer.querySelector('button.selected'); // Assuming 'selected' is the class for a chosen answer
+            if (selectedButton) {
+                const allButtons = Array.from(quizContainer.querySelectorAll('button'));
+                const selectedIndex = allButtons.indexOf(selectedButton);
+                state.interactiveStates['unique-quiz-id'] = { selectedIndex: selectedIndex };
+            }
+        }
+        */
+
+        return state;
+    }
+
+    /**
+     * Loads the state from the server and applies it to the worksheet.
+     * THIS FUNCTION MUST ALSO BE CUSTOMIZED TO MATCH getWorksheetStateForServer.
+     */
+    function loadWorksheetStateFromServer() {
+        // The parent application injects the saved state into this global variable.
+        if (window.MGS_HUB_SAVED_STATE) {
+            const savedState = window.MGS_HUB_SAVED_STATE;
+            
+            // 1. Restore standard inputs
+            if (savedState.inputs) {
+                for (const id in savedState.inputs) {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        if (element.type === 'checkbox' || element.type === 'radio') {
+                            element.checked = savedState.inputs[id];
+                        } else {
+                            element.value = savedState.inputs[id];
+                        }
+                        // Trigger an input event to ensure any dependent JS updates
+                        element.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                }
+            }
+
+            // 2. *** CUSTOM STATE LOADING FOR INTERACTIVE ELEMENTS GOES HERE ***
+            if (savedState.interactiveStates) {
+                for (const id in savedState.interactiveStates) {
+                    const container = document.getElementById(id);
+                    if (!container) continue;
+                    
+                    const stateData = savedState.interactiveStates[id];
+
+                    // Example for restoring a quiz:
+                    /*
+                    if (id === 'unique-quiz-id' && stateData.selectedIndex !== undefined) {
+                        const buttons = container.querySelectorAll('button');
+                        if (buttons[stateData.selectedIndex]) {
+                            // Programmatically click the button to restore the state
+                            buttons[stateData.selectedIndex].click(); 
+                        }
+                    }
+                    */
+                }
+            }
+            console.log('Worksheet state loaded from server.');
+        }
+    }
+
+    /**
+     * Sends the current worksheet state to the parent application.
+     */
+    function saveStateToServer() {
+        const currentState = getWorksheetStateForServer();
+        // The parent window (our React app) listens for this message.
+        window.parent.postMessage({
+            type: 'SAVE_STATE',
+            payload: currentState
+        }, '*');
+    }
+
+    /**
+     * Initializes the worksheet interactivity and the save/load logic.
+     */
+    function init() {
+        // --- Call your worksheet's existing initialization functions here ---
+        // e.g., initQuizzes(), initDragDrop(), etc.
+
+        // Load the student's saved work AFTER the UI is ready.
+        loadWorksheetStateFromServer();
+
+        // Set up auto-saving to the platform.
+        setInterval(saveStateToServer, SAVE_INTERVAL);
+
+        // Optional: Add a manual save button for the student.
+        const manualSaveButton = document.getElementById('manual-save-btn');
+        if (manualSaveButton) {
+            manualSaveButton.addEventListener('click', () => {
+                saveStateToServer();
+                // Provide visual feedback
+                const originalText = manualSaveButton.textContent;
+                manualSaveButton.textContent = 'Saved!';
+                manualSaveButton.disabled = true;
+                setTimeout(() => {
+                    manualSaveButton.textContent = originalText;
+                    manualSaveButton.disabled = false;
+                }, 1500);
+            });
+        }
+    }
+
+    // Run the initialization function once the DOM is fully loaded.
+    init();
+});
+</script>
+
+Step 2: Ensure All Interactive Elements Have Unique IDs
+Before customizing the script, you must go through the new worksheet's HTML and ensure that every single element that a student can interact with (or its direct container) has a unique and stable id. This is non-negotiable for the save/load system to work reliably.
+
+Good: <textarea id="exam-answer-1">, <div id="drag-drop-task-3">, <li id="quiz-2-option-c">
+
+Bad: <textarea>, <div>, <input class="answer"> (without an id)
+
+Step 3: Customize the getWorksheetStateForServer() Function
+This is the most critical part of the adaptation. You must add logic to this function to correctly capture the state of every interactive element in the new worksheet.
+
+For standard textareas and inputs: The provided script already handles this as long as they have an id.
+
+For custom quizzes: Identify the container div for the quiz. Find the selected answer (e.g., by checking for a .selected or .correct class). Store the index of the selected button/option in the interactiveStates object.
+
+For matching/drag-drop tasks: Identify the container. Find all the items that have been successfully matched (e.g., they have a .matched class). Store an array of the matched pair identifiers.
+
+For fill-in-the-blanks: Find all the blank spaces that have been filled. Store an object where keys are the blank's index or ID and values are the words filled in.
+
+Example Customization for getWorksheetStateForServer():
+
+// Inside getWorksheetStateForServer()...
+
+// Example: Saving a multiple-choice quiz with the container ID "factor-quiz"
+const quizContainer = document.getElementById('factor-quiz');
+if (quizContainer) {
+    // Assumes the selected button gets a class 'active-selection'
+    const selectedButton = quizContainer.querySelector('button.active-selection'); 
+    if (selectedButton) {
+        const allButtons = Array.from(quizContainer.querySelectorAll('button'));
+        const selectedIndex = allButtons.indexOf(selectedButton);
+        // Store the index of the selected button
+        state.interactiveStates['factor-quiz'] = { selectedIndex: selectedIndex };
+    }
+}
+
+// Example: Saving a matching task with the container ID "component-matching-task"
+const matchingContainer = document.getElementById('component-matching-task');
+if (matchingContainer) {
+    const matchedItems = [];
+    // Assumes matched items get a class 'is-matched' and have a 'data-match-id' attribute
+    matchingContainer.querySelectorAll('.is-matched').forEach(item => {
+        matchedItems.push(item.dataset.matchId);
+    });
+    // Store an array of the IDs of the matched items
+    state.interactiveStates['component-matching-task'] = { matchedPairs: matchedItems };
+}
+
+Step 4: Customize the loadWorksheetStateFromServer() Function
+Now, you must write the logic to reverse the process from Step 3, restoring the state from the savedState object.
+
+For custom quizzes: Get the saved selectedIndex. Find the corresponding button in the quiz container and programmatically click() it to trigger the worksheet's own styling and logic.
+
+For matching/drag-drop tasks: Loop through the matchedPairs array. For each ID, find the corresponding elements and apply the necessary CSS classes (e.g., .matched) to restore their appearance and state.
+
+For fill-in-the-blanks: Loop through the saved blank data. Find each blank element by its ID or index and set its textContent or value to the saved word.
+
+Example Customization for loadWorksheetStateFromServer():
+
+// Inside the 'if (savedState.interactiveStates)' block...
+
+const stateData = savedState.interactiveStates[id];
+const container = document.getElementById(id);
+
+// Example: Restoring the "factor-quiz"
+if (id === 'factor-quiz' && stateData.selectedIndex !== undefined) {
+    const buttons = container.querySelectorAll('button');
+    if (buttons[stateData.selectedIndex]) {
+        buttons[stateData.selectedIndex].click(); // Simulate a click to restore state
+    }
+}
+
+// Example: Restoring the "component-matching-task"
+if (id === 'component-matching-task' && stateData.matchedPairs) {
+    stateData.matchedPairs.forEach(matchId => {
+        const item = container.querySelector(`[data-match-id="${matchId}"]`);
+        if (item) {
+            item.classList.add('is-matched'); // Re-apply the class that shows it's matched
+        }
+    });
+}
+
+Step 5: Final Review
+Confirm that all interactive elements have unique ids.
+
+Ensure every custom interactive element has corresponding save logic in getWorksheetStateForServer.
+
+Ensure every custom interactive element has corresponding load logic in loadWorksheetStateFromServer.
+
+Make sure the worksheet's own JavaScript initialization functions are called inside the init() function before loadWorksheetStateFromServer() is called. This ensures the elements exist before you try to restore their state.

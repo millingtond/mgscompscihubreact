@@ -1,219 +1,236 @@
 import React, { useState, useEffect, useCallback } from 'react';
-// Import the necessary Firebase Functions modules
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 
-// --- No changes needed in the main WorksheetViewer component ---
-// Just ensure the 'app' prop is passed down to QuizTaker
-function WorksheetViewer({ assignment, db, navigateTo, returnRoute = 'dashboard', app }) {
-  const [worksheetHtml, setWorksheetHtml] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-
-  const worksheetData = assignment.worksheet;
-
-  const processHtmlWorksheet = useCallback((htmlContent) => {
-    // ... (existing code for processing HTML is unchanged)
-    return htmlContent;
-  }, [assignment.id, assignment.studentUID]);
-
-  useEffect(() => {
-    if (worksheetData.type === 'html' && worksheetData.htmlContent) {
-      const processedHtml = processHtmlWorksheet(worksheetData.htmlContent);
-      setWorksheetHtml(processedHtml);
+// --- Helper Component (No changes needed) ---
+const SaveStatusIndicator = ({ status }) => {
+    const statusConfig = {
+        saving: { message: 'Saving...', color: 'text-gray-500', icon: '⏳' },
+        saved: { message: 'Progress Saved', color: 'text-green-600', icon: '✓' },
+        error: { message: 'Save Failed', color: 'text-red-600', icon: '✗' },
+        idle: { message: '', color: '', icon: '' },
+    };
+    const { message, color, icon } = statusConfig[status] || statusConfig.idle;
+    if (status === 'idle') {
+        return <div className="w-36 h-6" />;
     }
-  }, [worksheetData, processHtmlWorksheet]);
+    return (
+        <div className={`flex items-center justify-end transition-opacity duration-300 ${color}`}>
+            <span className="mr-2">{icon}</span>
+            <p className="text-sm font-medium">{message}</p>
+        </div>
+    );
+};
 
-  if (!worksheetData) {
-    return <div>Loading worksheet...</div>;
-  }
+// --- Main Component ---
+function WorksheetViewer({ assignment, db, navigateTo, returnRoute = 'dashboard' }) {
+    const [worksheetHtml, setWorksheetHtml] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [saveStatus, setSaveStatus] = useState('idle');
 
-  return (
-    <div className="bg-gray-100 min-h-screen">
-      <header className="bg-white shadow-sm p-4 flex justify-between items-center">
-        <button
-          onClick={() => navigateTo(returnRoute)}
-          className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
-        >
-          &larr; Back
-        </button>
-        <h1 className="text-xl font-bold">{worksheetData.title}</h1>
-        <div></div> {/* Spacer */}
-      </header>
+    useEffect(() => {
+        if (!assignment?.worksheet?.url) {
+            setError('Assigned worksheet data is missing or invalid.');
+            setIsLoading(false);
+            return;
+        }
+        setIsLoading(true);
+        setError('');
 
-      <main className="container mx-auto p-4 md:p-8">
-        {worksheetData.type === 'quiz' ? (
-          <QuizTaker assignment={assignment} worksheetData={worksheetData} db={db} app={app} />
-        ) : (
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <iframe
-              srcDoc={worksheetHtml}
-              title="Worksheet"
-              className="w-full h-screen border-none"
-              id="worksheet-iframe"
-            ></iframe>
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+        const prepareWorksheet = async () => {
+            try {
+                const response = await fetch(assignment.worksheet.url);
+                if (!response.ok) throw new Error(`Failed to fetch worksheet: ${response.statusText}`);
+                let htmlContent = await response.text();
+                const savedState = assignment.studentWork || {};
+
+                const scriptToInject = `
+          <script>
+            document.addEventListener('DOMContentLoaded', () => {
+              let lastSavedState = ${JSON.stringify(savedState)};
+
+              // --- STATE SAVING LOGIC ---
+              function getWorksheetState() {
+                  const state = {
+                      inputs: {},
+                      interactiveStates: {}
+                  };
+                  // 1. Save 'savable' text/number inputs
+                  document.querySelectorAll('textarea.savable, input.savable').forEach(el => {
+                      if (el.id) state.inputs[el.id] = el.value;
+                  });
+                  // 2. Save Starter Match-Up
+                  const matchingTask = document.getElementById('matching-task');
+                  if (matchingTask) {
+                      const matchedIds = [];
+                      matchingTask.querySelectorAll('.match-item.matched').forEach(item => {
+                          matchedIds.push(item.dataset.match);
+                      });
+                      state.interactiveStates['matching-task'] = { matched: Array.from(new Set(matchedIds)) };
+                  }
+                  // 3. Save Fill-in-the-Blanks
+                  const blanksTask = document.getElementById('blanks-task');
+                  if (blanksTask) {
+                      const filledBlanks = {};
+                      blanksTask.querySelectorAll('.blank-space').forEach(blank => {
+                          if (blank.textContent.trim()) {
+                              filledBlanks[blank.dataset.answer] = blank.textContent;
+                          }
+                      });
+                      state.interactiveStates['blanks-task'] = { filledBlanks };
+                  }
+                  // 4. Save Von Neumann Drag-and-Drop
+                  const labelTask = document.getElementById('label-task');
+                  if (labelTask) {
+                      const dropZones = {};
+                      labelTask.querySelectorAll('.drop-zone').forEach(zone => {
+                          const item = zone.querySelector('.label-item');
+                          if (item) dropZones[zone.dataset.answer] = item.dataset.label;
+                      });
+                      state.interactiveStates['label-task'] = { dropZones };
+                  }
+                  // 5. Save all Multiple-Choice Quizzes
+                  document.querySelectorAll('.quiz-options').forEach(quiz => {
+                      if (!quiz.id) return;
+                      const selectedOption = quiz.querySelector('li.correct, li.incorrect');
+                      if (selectedOption) {
+                          const allOptions = Array.from(quiz.querySelectorAll('li'));
+                          state.interactiveStates[quiz.id] = { selectedIndex: allOptions.indexOf(selectedOption) };
+                      }
+                  });
+                  return state;
+              }
+
+              // --- STATE LOADING LOGIC ---
+              function loadWorksheetState(stateToLoad) {
+                  if (!stateToLoad) return;
+                  if (stateToLoad.inputs) {
+                      for (const id in stateToLoad.inputs) {
+                          const el = document.getElementById(id);
+                          if (el) el.value = stateToLoad.inputs[id];
+                      }
+                  }
+                  if (stateToLoad.interactiveStates) {
+                      for (const id in stateToLoad.interactiveStates) {
+                          const container = document.getElementById(id);
+                          if (!container) continue;
+                          const stateData = stateToLoad.interactiveStates[id];
+                          if (id === 'matching-task' && stateData.matched) {
+                              stateData.matched.forEach(matchId => {
+                                  container.querySelectorAll(\`.match-item[data-match="\${matchId}"]\`).forEach(item => item.classList.add('matched'));
+                              });
+                          } else if (id === 'blanks-task' && stateData.filledBlanks) {
+                             for (const key in stateData.filledBlanks) {
+                                const blank = container.querySelector(\`.blank-space[data-answer="\${key}"]\`);
+                                if (blank) blank.textContent = stateData.filledBlanks[key];
+                             }
+                             container.querySelector('#check-blanks-btn')?.click();
+                          } else if (id === 'label-task' && stateData.dropZones) {
+                             const list = container.querySelector('.labels-list');
+                             for (const zoneAnswer in stateData.dropZones) {
+                                const labelId = stateData.dropZones[zoneAnswer];
+                                const zone = container.querySelector(\`.drop-zone[data-answer="\${zoneAnswer}"]\`);
+                                const label = list.querySelector(\`.label-item[data-label="\${labelId}"]\`);
+                                if (zone && label) {
+                                  const placeholder = zone.querySelector('p');
+                                  if (placeholder) placeholder.remove();
+                                  zone.appendChild(label);
+                                }
+                             }
+                             container.querySelector('#checkVnMatchBtn')?.click();
+                          } else if (container.matches('.quiz-options') && stateData.selectedIndex > -1) {
+                              const options = container.querySelectorAll('li');
+                              if (options[stateData.selectedIndex]) options[stateData.selectedIndex].click();
+                          }
+                      }
+                  }
+              }
+
+              // --- AUTO-SAVE POLLING ---
+              // This is the new, more robust save mechanism.
+              setInterval(() => {
+                const currentState = getWorksheetState();
+                // Only save if the state has actually changed.
+                if (JSON.stringify(currentState) !== JSON.stringify(lastSavedState)) {
+                  lastSavedState = currentState;
+                  window.parent.postMessage({ type: 'SAVE_WORKSHEET_DATA', payload: currentState }, '*');
+                }
+              }, 4000); // Check for changes every 4 seconds.
+              
+              // Load the initial state when the worksheet is ready.
+              loadWorksheetState(lastSavedState);
+            });
+          <\/script>
+        `;
+                htmlContent = htmlContent.replace('</head>', `${scriptToInject}</head>`);
+                setWorksheetHtml(htmlContent);
+            } catch (err) {
+                console.error("Error preparing worksheet:", err);
+                setError("Could not load the worksheet. Please try again.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        prepareWorksheet();
+    }, [assignment]);
+
+    const handleIncomingSave = useCallback(async (data) => {
+        if (!assignment?.id) return;
+        setSaveStatus('saving');
+        const assignmentRef = doc(db, 'assignments', assignment.id);
+        try {
+            await updateDoc(assignmentRef, {
+                studentWork: data,
+                status: 'In Progress',
+            });
+            setSaveStatus('saved');
+        } catch (err) {
+            console.error("Error saving progress:", err);
+            setSaveStatus('error');
+        } finally {
+            setTimeout(() => setSaveStatus('idle'), 2000);
+        }
+    }, [assignment?.id, db]);
+
+    useEffect(() => {
+        const handleMessage = (event) => {
+            if (event.data?.type === 'SAVE_WORKSHEET_DATA') {
+                handleIncomingSave(event.data.payload);
+            }
+        };
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, [handleIncomingSave]);
 
 
-// --- Sub-component for displaying and handling the Quiz ---
-const QuizTaker = ({ assignment, worksheetData, db, app }) => {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  // Initialize answers from saved student work if available
-  const [studentAnswers, setStudentAnswers] = useState(() => {
-    if (assignment.studentWork && Array.isArray(assignment.studentWork.answers)) {
-      return assignment.studentWork.answers;
-    }
-    return new Array(worksheetData.questions.length).fill(null);
-  });
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  // Determine if the quiz is finished based on status or if a mark is present
-  const [quizFinished, setQuizFinished] = useState(
-    assignment.status === 'Completed' || typeof assignment.mark === 'number'
-  );
-  const [finalScore, setFinalScore] = useState(assignment.mark || null);
-
-  const currentQuestion = worksheetData.questions[currentQuestionIndex];
-
-  const handleAnswerSelect = (optionIndex) => {
-    if (quizFinished) return; // Prevent changes after submission
-    const newAnswers = [...studentAnswers];
-    newAnswers[currentQuestionIndex] = optionIndex;
-    setStudentAnswers(newAnswers);
-  };
-
-  const handleNext = () => {
-    if (currentQuestionIndex < worksheetData.questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    }
-  };
-
-  const handlePrev = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1);
-    }
-  };
-
-  const handleQuizSubmit = async () => {
-    if (!window.confirm("Are you sure you want to submit your answers? You cannot change them after submitting.")) {
-      return;
-    }
-    setIsSubmitting(true);
-
-    const finalAnswers = studentAnswers.map(ans => (typeof ans === 'number' ? ans : null));
-
-    try {
-      const functions = getFunctions(app);
-      const submitQuiz = httpsCallable(functions, 'submitQuiz');
-      const result = await submitQuiz({
-        assignmentId: assignment.id,
-        answers: finalAnswers
-      });
-
-      if (result.data && typeof result.data.score === 'number') {
-        setFinalScore(result.data.score);
-      }
-      setQuizFinished(true);
-
-    } catch (err) {
-      console.error("Error submitting quiz via cloud function:", err);
-      alert(`There was an error submitting your quiz. Please try again. \nError: ${err.message}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // If the quiz is finished, show the results view
-  if (quizFinished) {
-    const scoreToShow = finalScore;
-    const resultsToShow = assignment.studentWork?.answers || studentAnswers;
+    if (isLoading) { return <div className="flex items-center justify-center h-screen text-lg">Loading Worksheet...</div>; }
+    if (error) { return <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg m-4">{error}</div>; }
 
     return (
-      <div className="p-4 sm:p-8 bg-white rounded-lg shadow-lg">
-        <h3 className="text-2xl font-bold mb-4 text-center">Quiz Complete!</h3>
-        <div className="bg-blue-100 text-blue-800 p-6 rounded-lg text-center">
-          <p className="text-lg">Your Score:</p>
-          <p className="text-4xl font-bold">{scoreToShow} / {worksheetData.questions.length}</p>
-        </div>
-        <div className="mt-6">
-          <h4 className="font-semibold mb-2 text-lg">Review Your Answers:</h4>
-          {worksheetData.questions.map((q, index) => (
-            <div key={index} className={`p-4 rounded-md mb-3 border-l-4 ${resultsToShow[index] === q.correctAnswerIndex ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}`}>
-              <p className="font-bold">{index + 1}. {q.questionText}</p>
-              {/* --- FIX: Added image display to review section --- */}
-              {q.imageUrl && (
-                <div className="my-4">
-                    <img src={q.imageUrl} alt={`Visual for question ${index + 1}`} className="max-w-full md:max-w-sm rounded-lg shadow-sm" />
+        <div className="flex flex-col h-screen bg-gray-100">
+            <header className="flex-shrink-0 bg-white shadow-md z-10 p-3">
+                <div className="flex items-center justify-between max-w-7xl mx-auto">
+                    <button onClick={() => navigateTo(returnRoute)} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
+                        &larr; Back to Dashboard
+                    </button>
+                    <h2 className="text-xl font-bold text-gray-800 hidden md:block truncate px-4">
+                        {assignment?.worksheet?.title || 'Worksheet'}
+                    </h2>
+                    <div className="flex items-center gap-4">
+                        <SaveStatusIndicator status={saveStatus} />
+                    </div>
                 </div>
-              )}
-              <p className="text-sm mt-2">You answered: <span className="font-semibold">{q.options[resultsToShow[index]] ?? 'No Answer'}</span></p>
-              {resultsToShow[index] !== q.correctAnswerIndex && (
-                <p className="text-sm text-green-700">Correct answer: <span className="font-semibold">{q.options[q.correctAnswerIndex]}</span></p>
-              )}
-            </div>
-          ))}
+            </header>
+            <main className="flex-grow">
+                <iframe
+                    srcDoc={worksheetHtml}
+                    title={assignment?.worksheet?.title || 'Interactive Worksheet'}
+                    className="w-full h-full border-0"
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                />
+            </main>
         </div>
-      </div>
     );
-  }
-
-  // This is the active quiz-taking view
-  return (
-    <div className="bg-white p-4 sm:p-8 rounded-lg shadow-lg">
-      <div className="mb-6">
-        <p className="text-gray-600 text-sm">Question {currentQuestionIndex + 1} of {worksheetData.questions.length}</p>
-        {/* --- FIX: Added image display to active question --- */}
-        {currentQuestion.imageUrl && (
-            <div className="my-4">
-                <img src={currentQuestion.imageUrl} alt={`Visual for question ${currentQuestionIndex + 1}`} className="max-w-full md:max-w-md rounded-lg shadow-sm" />
-            </div>
-        )}
-        <h3 className="text-2xl font-semibold mt-1">{currentQuestion.questionText}</h3>
-      </div>
-
-      <div className="space-y-3">
-        {currentQuestion.options.map((option, index) => (
-          <button
-            key={index}
-            onClick={() => handleAnswerSelect(index)}
-            className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 ${studentAnswers[currentQuestionIndex] === index ? 'bg-blue-500 text-white border-blue-600 shadow-md' : 'bg-white hover:bg-gray-100 border-gray-300'}`}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-8 flex justify-between items-center">
-        <button
-          onClick={handlePrev}
-          disabled={currentQuestionIndex === 0}
-          className="px-6 py-2 bg-gray-300 rounded-md disabled:opacity-50"
-        >
-          Previous
-        </button>
-        {currentQuestionIndex === worksheetData.questions.length - 1 ? (
-          <button
-            onClick={handleQuizSubmit}
-            disabled={isSubmitting}
-            className="px-6 py-2 bg-green-600 text-white font-bold rounded-md hover:bg-green-700 disabled:bg-green-300"
-          >
-            {isSubmitting ? 'Submitting...' : 'Submit Final Answers'}
-          </button>
-        ) : (
-          <button
-            onClick={handleNext}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Next
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
+}
 
 export default WorksheetViewer;

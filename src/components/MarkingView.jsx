@@ -150,9 +150,43 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
     processWorksheet();
   }, [currentAssignment, worksheet]);
 
-  const handleSave = async () => { /* ... same as before ... */ };
+  const handleSave = async () => {
+    if (!currentAssignment) {
+        setError("No assignment selected to save.");
+        return;
+    }
+    setIsSaving(true);
+    setError('');
+    try {
+        const assignmentRef = doc(db, "assignments", currentAssignment.id);
+        await updateDoc(assignmentRef, {
+            mark: grade,
+            feedback: feedback,
+            marked: true,
+            completed: true, // This ensures it appears on the progress dashboard
+            status: 'Completed' // Consistent with bulk import
+        });
 
-  // --- FULLY RESTORED FUNCTION ---
+        // Optimistically update the local state to reflect the change immediately
+        const updatedAssignments = [...classAssignments];
+        updatedAssignments[currentAssignmentIndex] = {
+            ...updatedAssignments[currentAssignmentIndex],
+            mark: grade,
+            feedback: feedback,
+            marked: true,
+            completed: true,
+            status: 'Completed'
+        };
+        setClassAssignments(updatedAssignments);
+
+    } catch (err) {
+        console.error("Error saving mark and feedback:", err);
+        setError("Could not save the changes. Please try again.");
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
   const handleExportAllAnswers = async () => {
     if (classAssignments.length === 0) {
       alert("No assignments to export.");
@@ -234,7 +268,6 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
     document.body.removeChild(link);
   };
 
-  // --- FULLY RESTORED FUNCTION ---
   const handleDownloadTemplate = () => {
     if (classAssignments.length === 0) {
       alert("No assignments to create a template for.");
@@ -263,7 +296,6 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
     document.body.removeChild(link);
   };
 
-  // --- FULLY RESTORED FUNCTION ---
   const handleImportFeedback = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -296,7 +328,9 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
               batch.update(assignmentRef, {
                 mark: grade,
                 feedback: feedback,
-                status: 'Completed'
+                status: 'Completed',
+                marked: true,
+                completed: true, // Ensures imported feedback also updates progress
               });
               updatedCount++;
             }
@@ -320,7 +354,12 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
     reader.readAsText(file);
   };
 
-  const navigateStudent = (direction) => { /* ... same as before ... */ };
+  const navigateStudent = (direction) => {
+      const newIndex = currentAssignmentIndex + direction;
+      if (newIndex >= 0 && newIndex < classAssignments.length) {
+          setCurrentAssignmentIndex(newIndex);
+      }
+  };
 
   if (!currentAssignment || !worksheet) {
     return <div className="p-8 text-center">Loading assignment details...</div>;
@@ -335,7 +374,7 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
       <div className="flex-1 flex flex-col">
         <div className="p-4 border-b bg-white">
           <h2 className="text-xl font-bold">Marking: {worksheet.title}</h2>
-          <p className="text-sm text-gray-600">Student: <span className="font-semibold">{currentAssignment.username}</span></p>
+          <p className="text-sm text-gray-600">Student: <span className="font-semibold">{currentAssignment.username}</span> ({currentAssignmentIndex + 1} of {classAssignments.length})</p>
         </div>
         <div className="flex-1 bg-white shadow-md m-4 rounded-lg overflow-y-auto">
           {loading ? (
@@ -361,7 +400,15 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
         </button>
         
         <div className="mb-6 border p-3 rounded-md">
-            {/* Student Navigation... */}
+            <div className="flex justify-between items-center">
+                <button onClick={() => navigateStudent(-1)} disabled={currentAssignmentIndex === 0} className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded disabled:opacity-50">
+                    &larr; Prev
+                </button>
+                <span className="text-sm font-semibold">{currentAssignmentIndex + 1} / {classAssignments.length}</span>
+                <button onClick={() => navigateStudent(1)} disabled={currentAssignmentIndex === classAssignments.length - 1} className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded disabled:opacity-50">
+                    Next &rarr;
+                </button>
+            </div>
         </div>
 
         {worksheet.type !== 'quiz' && (
