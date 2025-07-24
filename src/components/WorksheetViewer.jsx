@@ -48,48 +48,79 @@ function WorksheetViewer({ assignment, db, navigateTo, returnRoute = 'dashboard'
           <script>
             document.addEventListener('DOMContentLoaded', () => {
               let lastSavedState = ${JSON.stringify(savedState)};
+              const engagementMetrics = lastSavedState.engagementMetrics || {
+                  timeSpent: {},
+                  interactionCounts: {}
+              };
+              let activeSectionTimer = { id: null, startTime: null };
+
+              // --- ENGAGEMENT TRACKING ---
+              function stopActiveTimer() {
+                  if (activeSectionTimer.id && activeSectionTimer.startTime) {
+                      const endTime = Date.now();
+                      const timeSpentInSeconds = Math.round((endTime - activeSectionTimer.startTime) / 1000);
+                      engagementMetrics.timeSpent[activeSectionTimer.id] = (engagementMetrics.timeSpent[activeSectionTimer.id] || 0) + timeSpentInSeconds;
+                  }
+              }
+
+              const observer = new IntersectionObserver((entries) => {
+                  entries.forEach(entry => {
+                      if (entry.isIntersecting) {
+                          stopActiveTimer(); // Stop timer for the previous section
+                          // Start timer for the new visible section
+                          activeSectionTimer = { id: entry.target.id, startTime: Date.now() };
+                      }
+                  });
+              }, { threshold: 0.6 }); // Triggers when 60% of the section is visible
+
+              document.querySelectorAll('.worksheet-section').forEach(section => {
+                  if (section.id) {
+                    observer.observe(section);
+                    // Initialize metrics if not present
+                    if (!engagementMetrics.interactionCounts[section.id]) {
+                        engagementMetrics.interactionCounts[section.id] = 0;
+                    }
+                  }
+              });
+
+              document.body.addEventListener('click', (e) => {
+                  const section = e.target.closest('.worksheet-section');
+                  if (section && section.id) {
+                      engagementMetrics.interactionCounts[section.id]++;
+                  }
+              });
+
+              window.addEventListener('beforeunload', stopActiveTimer);
 
               // --- STATE SAVING LOGIC ---
               function getWorksheetState() {
+                  stopActiveTimer(); // Ensure latest time is recorded before saving
+                  activeSectionTimer.startTime = Date.now(); // Reset timer after recording
+
                   const state = {
                       inputs: {},
-                      interactiveStates: {}
+                      interactiveStates: {},
+                      engagementMetrics: engagementMetrics
                   };
-                  // 1. Save 'savable' text/number inputs
-                  document.querySelectorAll('textarea.savable, input.savable').forEach(el => {
-                      if (el.id) state.inputs[el.id] = el.value;
-                  });
-                  // 2. Save Starter Match-Up
+                  // (All existing input and interactive state saving logic remains here)
+                  document.querySelectorAll('textarea.savable, input.savable').forEach(el => { if (el.id) state.inputs[el.id] = el.value; });
                   const matchingTask = document.getElementById('matching-task');
                   if (matchingTask) {
-                      const matchedIds = [];
-                      matchingTask.querySelectorAll('.match-item.matched').forEach(item => {
-                          matchedIds.push(item.dataset.match);
-                      });
+                      const matchedIds = Array.from(matchingTask.querySelectorAll('.match-item.matched')).map(item => item.dataset.match);
                       state.interactiveStates['matching-task'] = { matched: Array.from(new Set(matchedIds)) };
                   }
-                  // 3. Save Fill-in-the-Blanks
                   const blanksTask = document.getElementById('blanks-task');
                   if (blanksTask) {
                       const filledBlanks = {};
-                      blanksTask.querySelectorAll('.blank-space').forEach(blank => {
-                          if (blank.textContent.trim()) {
-                              filledBlanks[blank.dataset.answer] = blank.textContent;
-                          }
-                      });
+                      blanksTask.querySelectorAll('.blank-space').forEach(blank => { if (blank.textContent.trim()) { filledBlanks[blank.dataset.answer] = blank.textContent; } });
                       state.interactiveStates['blanks-task'] = { filledBlanks };
                   }
-                  // 4. Save Von Neumann Drag-and-Drop
                   const labelTask = document.getElementById('label-task');
                   if (labelTask) {
                       const dropZones = {};
-                      labelTask.querySelectorAll('.drop-zone').forEach(zone => {
-                          const item = zone.querySelector('.label-item');
-                          if (item) dropZones[zone.dataset.answer] = item.dataset.label;
-                      });
+                      labelTask.querySelectorAll('.drop-zone').forEach(zone => { const item = zone.querySelector('.label-item'); if (item) dropZones[zone.dataset.answer] = item.dataset.label; });
                       state.interactiveStates['label-task'] = { dropZones };
                   }
-                  // 5. Save all Multiple-Choice Quizzes
                   document.querySelectorAll('.quiz-options').forEach(quiz => {
                       if (!quiz.id) return;
                       const selectedOption = quiz.querySelector('li.correct, li.incorrect');
@@ -103,61 +134,30 @@ function WorksheetViewer({ assignment, db, navigateTo, returnRoute = 'dashboard'
 
               // --- STATE LOADING LOGIC ---
               function loadWorksheetState(stateToLoad) {
+                  // (All existing loading logic remains here, no changes needed)
                   if (!stateToLoad) return;
-                  if (stateToLoad.inputs) {
-                      for (const id in stateToLoad.inputs) {
-                          const el = document.getElementById(id);
-                          if (el) el.value = stateToLoad.inputs[id];
-                      }
-                  }
+                  if (stateToLoad.inputs) { for (const id in stateToLoad.inputs) { const el = document.getElementById(id); if (el) el.value = stateToLoad.inputs[id]; } }
                   if (stateToLoad.interactiveStates) {
                       for (const id in stateToLoad.interactiveStates) {
-                          const container = document.getElementById(id);
-                          if (!container) continue;
+                          const container = document.getElementById(id); if (!container) continue;
                           const stateData = stateToLoad.interactiveStates[id];
-                          if (id === 'matching-task' && stateData.matched) {
-                              stateData.matched.forEach(matchId => {
-                                  container.querySelectorAll(\`.match-item[data-match="\${matchId}"]\`).forEach(item => item.classList.add('matched'));
-                              });
-                          } else if (id === 'blanks-task' && stateData.filledBlanks) {
-                             for (const key in stateData.filledBlanks) {
-                                const blank = container.querySelector(\`.blank-space[data-answer="\${key}"]\`);
-                                if (blank) blank.textContent = stateData.filledBlanks[key];
-                             }
-                             container.querySelector('#check-blanks-btn')?.click();
-                          } else if (id === 'label-task' && stateData.dropZones) {
-                             const list = container.querySelector('.labels-list');
-                             for (const zoneAnswer in stateData.dropZones) {
-                                const labelId = stateData.dropZones[zoneAnswer];
-                                const zone = container.querySelector(\`.drop-zone[data-answer="\${zoneAnswer}"]\`);
-                                const label = list.querySelector(\`.label-item[data-label="\${labelId}"]\`);
-                                if (zone && label) {
-                                  const placeholder = zone.querySelector('p');
-                                  if (placeholder) placeholder.remove();
-                                  zone.appendChild(label);
-                                }
-                             }
-                             container.querySelector('#checkVnMatchBtn')?.click();
-                          } else if (container.matches('.quiz-options') && stateData.selectedIndex > -1) {
-                              const options = container.querySelectorAll('li');
-                              if (options[stateData.selectedIndex]) options[stateData.selectedIndex].click();
-                          }
+                          if (id === 'matching-task' && stateData.matched) { stateData.matched.forEach(matchId => { container.querySelectorAll(\`.match-item[data-match="\${matchId}"]\`).forEach(item => item.classList.add('matched')); }); } 
+                          else if (id === 'blanks-task' && stateData.filledBlanks) { for (const key in stateData.filledBlanks) { const blank = container.querySelector(\`.blank-space[data-answer="\${key}"]\`); if (blank) blank.textContent = stateData.filledBlanks[key]; } container.querySelector('#check-blanks-btn')?.click(); } 
+                          else if (id === 'label-task' && stateData.dropZones) { const list = container.querySelector('.labels-list'); for (const zoneAnswer in stateData.dropZones) { const labelId = stateData.dropZones[zoneAnswer]; const zone = container.querySelector(\`.drop-zone[data-answer="\${zoneAnswer}"]\`); const label = list.querySelector(\`.label-item[data-label="\${labelId}"]\`); if (zone && label) { const placeholder = zone.querySelector('p'); if (placeholder) placeholder.remove(); zone.appendChild(label); } } container.querySelector('#checkVnMatchBtn')?.click(); } 
+                          else if (container.matches('.quiz-options') && stateData.selectedIndex > -1) { const options = container.querySelectorAll('li'); if (options[stateData.selectedIndex]) options[stateData.selectedIndex].click(); }
                       }
                   }
               }
 
               // --- AUTO-SAVE POLLING ---
-              // This is the new, more robust save mechanism.
               setInterval(() => {
                 const currentState = getWorksheetState();
-                // Only save if the state has actually changed.
                 if (JSON.stringify(currentState) !== JSON.stringify(lastSavedState)) {
                   lastSavedState = currentState;
                   window.parent.postMessage({ type: 'SAVE_WORKSHEET_DATA', payload: currentState }, '*');
                 }
-              }, 4000); // Check for changes every 4 seconds.
+              }, 5000); // Save every 5 seconds
               
-              // Load the initial state when the worksheet is ready.
               loadWorksheetState(lastSavedState);
             });
           <\/script>

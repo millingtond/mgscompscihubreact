@@ -43,7 +43,7 @@ function StudentWorkView({ student, classData, db, navigateTo }) {
   }, [student, db]);
 
   const handleOpenMarkingView = (assignment) => {
-    navigateTo('marking', classData, student, null, assignment);
+    navigateTo('marking', classData, student, assignment);
   };
 
   const handleDeleteAssignment = async (assignmentId) => {

@@ -38,6 +38,61 @@ const QuizReview = ({ assignment, worksheet }) => {
     );
 };
 
+// --- NEW: Sub-component for displaying the Engagement Summary ---
+const EngagementSummary = ({ studentWork, totalTasks }) => {
+    if (!studentWork) return null;
+
+    const { interactiveStates = {}, inputs = {} } = studentWork;
+    const writtenAnswersCount = Object.values(inputs).filter(val => val.trim() !== '').length;
+
+    const getStatus = (taskKey) => {
+        const state = interactiveStates[taskKey];
+        if (!state) return { attempted: false, text: 'Not Attempted' };
+
+        if (taskKey === 'matching-task' && state.matched?.length > 0) return { attempted: true, text: 'Attempted' };
+        if (taskKey === 'blanks-task' && state.filledBlanks && Object.keys(state.filledBlanks).length > 0) return { attempted: true, text: 'Attempted' };
+        if (taskKey === 'label-task' && state.dropZones && Object.keys(state.dropZones).length > 0) return { attempted: true, text: 'Attempted' };
+        
+        // For multiple-choice quizzes within the worksheet
+        const quizAttempted = Object.keys(interactiveStates).some(id => id.startsWith('quiz-') && interactiveStates[id].selectedIndex > -1);
+        if (quizAttempted) return { attempted: true, text: 'Attempted' };
+
+        return { attempted: false, text: 'Not Attempted' };
+    };
+
+    const tasks = [
+        { key: 'matching-task', label: 'Matching Activity' },
+        { key: 'blanks-task', label: 'Fill-in-the-blanks' },
+        { key: 'label-task', label: 'Labeling Task' },
+        { key: 'quiz-options', label: 'In-Worksheet Quizzes'}
+    ];
+    
+    return (
+        <div className="mb-6 border p-3 rounded-md bg-yellow-50">
+            <h4 className="text-md font-semibold text-gray-800 mb-3">Engagement Summary</h4>
+            <ul className="text-xs text-gray-700 space-y-2">
+                <li className="flex items-center">
+                    <span className={`w-4 h-4 rounded-full mr-2 ${writtenAnswersCount > 0 ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                    Answered {writtenAnswersCount} of {totalTasks} Exam Questions
+                </li>
+                <hr className="my-2"/>
+                {tasks.map(task => {
+                    const status = getStatus(task.key);
+                    const isPresent = interactiveStates[task.key] !== undefined;
+                    if (!isPresent && task.key !=='quiz-options') return null; // Don't show if task doesn't exist in studentWork
+                     if (task.key === 'quiz-options' && !Object.keys(interactiveStates).some(k => k.startsWith('quiz-'))) return null;
+                    return (
+                        <li key={task.key} className="flex items-center">
+                            <span className={`w-4 h-4 rounded-full mr-2 ${status.attempted ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                            {task.label}: {status.text}
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+};
+
 
 function MarkingView({ assignment, classData, db, navigateTo }) {
   const [classAssignments, setClassAssignments] = useState([]);
@@ -61,7 +116,11 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
 
   useEffect(() => {
     const fetchClassAssignments = async () => {
-        if (!classData || !assignment) return;
+        if (!classData || !assignment) {
+            setError("Required data (class or assignment) is missing.");
+            setLoading(false);
+            return;
+        }
         try {
             const q = query(collection(db, "assignments"), where("classId", "==", classData.id), where("worksheetId", "==", assignment.worksheetId));
             const assignmentsSnapshot = await getDocs(q);
@@ -74,6 +133,10 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
                 return { id: assignDoc.id, ...assignmentData, username: studentUsername };
             }));
             
+            if(assignmentsList.length === 0) {
+                throw new Error("No assignments found for this class and worksheet combination.");
+            }
+
             setClassAssignments(assignmentsList);
             const initialIndex = assignmentsList.findIndex(a => a.id === assignment.id);
             setCurrentAssignmentIndex(initialIndex >= 0 ? initialIndex : 0);
@@ -81,14 +144,25 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
             const worksheetRef = doc(db, "worksheets", assignment.worksheetId);
             const worksheetSnap = await getDoc(worksheetRef);
             if (worksheetSnap.exists()) {
-                setWorksheet({ id: worksheetSnap.id, ...worksheetSnap.data() });
+                const worksheetData = worksheetSnap.data();
+                // Fetch raw HTML to count total tasks for the summary
+                let totalTasks = 0;
+                if (worksheetData.url) {
+                    const htmlResponse = await fetch(worksheetData.url);
+                    const htmlText = await htmlResponse.text();
+                    totalTasks = (htmlText.match(/<textarea/g) || []).length;
+                    setRawWorksheetHtml(htmlText); // Also set the raw HTML here
+                }
+                setWorksheet({ id: worksheetSnap.id, ...worksheetData, totalTasks });
             } else {
                 throw new Error("Worksheet document not found.");
             }
 
         } catch (err) {
             console.error("Error fetching class assignments or worksheet:", err);
-            setError("Could not load all assignments for this class.");
+            setError("Could not load assignment details. Please check the Firestore indexes and data integrity.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -96,44 +170,83 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
   }, [assignment, classData, db]);
 
   useEffect(() => {
-    if (!currentAssignment || !worksheet) return;
+    if (!currentAssignment || !worksheet || !rawWorksheetHtml) return;
 
-    const processWorksheet = async () => {
-      setLoading(true);
+    const processWorksheet = () => {
       setError('');
-
       try {
         if (worksheet.type === 'quiz') {
             setFeedback(currentAssignment.feedback || '');
             setGrade(currentAssignment.mark || '');
-            setLoading(false);
             return;
         }
 
-        if (!worksheet.worksheetURL || !worksheet.fileMap) throw new Error("Worksheet data is incomplete for an HTML worksheet.");
-
-        const response = await fetch(worksheet.worksheetURL);
-        if (!response.ok) throw new Error(`Failed to fetch main HTML: ${response.statusText}`);
-        let htmlContent = await response.text();
-        setRawWorksheetHtml(htmlContent);
-
-        htmlContent = htmlContent.replace(/ (src|href)="([^"]+)"/g, (match, attr, value) => {
-          if (!/^(https?:)?\/\//.test(value)) {
-            const fileName = value.split('/').pop();
-            if (worksheet.fileMap[fileName]) {
-              return ` ${attr}="${worksheet.fileMap[fileName]}"`;
-            }
-          }
-          return match;
-        });
-        
         const scriptToInject = `
           <script>
-            window.MGS_HUB_SAVED_STATE = ${JSON.stringify(currentAssignment.studentWork || {})};
-            window.MGS_HUB_VIEW_MODE = 'teacher';
+            document.addEventListener('DOMContentLoaded', () => {
+                const stateToLoad = ${JSON.stringify(currentAssignment.studentWork || {})};
+
+                function loadWorksheetState(stateToLoad) {
+                    if (!stateToLoad) return;
+                    // Restore standard text inputs and textareas
+                    if (stateToLoad.inputs) {
+                        for (const id in stateToLoad.inputs) {
+                            const el = document.getElementById(id);
+                            if (el) el.value = stateToLoad.inputs[id];
+                        }
+                    }
+                    // Restore complex interactive elements
+                    if (stateToLoad.interactiveStates) {
+                        for (const id in stateToLoad.interactiveStates) {
+                            const container = document.getElementById(id);
+                            if (!container) continue;
+                            const stateData = stateToLoad.interactiveStates[id];
+                            if (id === 'matching-task' && stateData.matched) {
+                                stateData.matched.forEach(matchId => {
+                                    container.querySelectorAll(\`.match-item[data-match="\${matchId}"]\`).forEach(item => item.classList.add('matched'));
+                                });
+                            } else if (id === 'blanks-task' && stateData.filledBlanks) {
+                                for (const key in stateData.filledBlanks) {
+                                    const blank = container.querySelector(\`.blank-space[data-answer="\${key}"]\`);
+                                    if (blank) blank.textContent = stateData.filledBlanks[key];
+                                }
+                                container.querySelector('#check-blanks-btn')?.click();
+                            } else if (id === 'label-task' && stateData.dropZones) {
+                                const list = container.querySelector('.labels-list');
+                                for (const zoneAnswer in stateData.dropZones) {
+                                    const labelId = stateData.dropZones[zoneAnswer];
+                                    const zone = container.querySelector(\`.drop-zone[data-answer="\${zoneAnswer}"]\`);
+                                    const label = list ? list.querySelector(\`.label-item[data-label="\${labelId}"]\`) : null;
+                                    if (zone && label) {
+                                        const placeholder = zone.querySelector('p');
+                                        if (placeholder) placeholder.remove();
+                                        zone.appendChild(label);
+                                    }
+                                }
+                                container.querySelector('#checkVnMatchBtn')?.click();
+                            } else if (id.startsWith('quiz-') && typeof stateData.selectedIndex === 'number' && stateData.selectedIndex > -1) {
+                                const options = container.querySelectorAll('li');
+                                if (options[stateData.selectedIndex]) options[stateData.selectedIndex].click();
+                            }
+                        }
+                    }
+                    // Disable all interactions for marking view
+                    document.querySelectorAll('textarea, input, .blank-space, .drop-zone, .label-item, .quiz-options li, button').forEach(el => {
+                        el.style.pointerEvents = 'none';
+                        el.style.cursor = 'default';
+                        if(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                          el.readOnly = true;
+                          el.style.backgroundColor = '#f8f9fa';
+                        } else {
+                          el.setAttribute('contenteditable', 'false');
+                        }
+                    });
+                }
+                loadWorksheetState(stateToLoad);
+            });
           <\/script>
         `;
-        const displayHtml = htmlContent.replace('</head>', `${scriptToInject}</head>`);
+        const displayHtml = rawWorksheetHtml.replace('</head>', `${scriptToInject}</head>`);
         
         setIframeSrcDoc(displayHtml);
         setFeedback(currentAssignment.feedback || '');
@@ -142,13 +255,11 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
       } catch (err) {
         console.error("Error processing worksheet:", err);
         setError("Could not load the worksheet content.");
-      } finally {
-        setLoading(false);
       }
     };
 
     processWorksheet();
-  }, [currentAssignment, worksheet]);
+  }, [currentAssignment, worksheet, rawWorksheetHtml]);
 
   const handleSave = async () => {
     if (!currentAssignment) {
@@ -163,11 +274,10 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
             mark: grade,
             feedback: feedback,
             marked: true,
-            completed: true, // This ensures it appears on the progress dashboard
-            status: 'Completed' // Consistent with bulk import
+            completed: true,
+            status: 'Completed'
         });
 
-        // Optimistically update the local state to reflect the change immediately
         const updatedAssignments = [...classAssignments];
         updatedAssignments[currentAssignmentIndex] = {
             ...updatedAssignments[currentAssignmentIndex],
@@ -211,7 +321,7 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
       exportContent += "---\n";
 
       const studentWork = assign.studentWork || {};
-      const studentAnswers = studentWork.inputs || studentWork;
+      const studentAnswers = studentWork.inputs || {};
       
       const questionContainers = doc.querySelectorAll('div.task-container, div[id^="Question"]');
       let answersFoundForStudent = false;
@@ -330,7 +440,7 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
                 feedback: feedback,
                 status: 'Completed',
                 marked: true,
-                completed: true, // Ensures imported feedback also updates progress
+                completed: true,
               });
               updatedCount++;
             }
@@ -361,12 +471,16 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
       }
   };
 
-  if (!currentAssignment || !worksheet) {
+  if (loading) {
     return <div className="p-8 text-center">Loading assignment details...</div>;
   }
   
   if (error) {
      return <div className="p-8 text-center text-red-500">{error}</div>;
+  }
+
+  if (!currentAssignment || !worksheet) {
+      return <div className="p-8 text-center">Could not find assignment details.</div>
   }
 
   return (
@@ -377,19 +491,15 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
           <p className="text-sm text-gray-600">Student: <span className="font-semibold">{currentAssignment.username}</span> ({currentAssignmentIndex + 1} of {classAssignments.length})</p>
         </div>
         <div className="flex-1 bg-white shadow-md m-4 rounded-lg overflow-y-auto">
-          {loading ? (
-            <p className="p-4">Loading Worksheet...</p>
+          {worksheet.type === 'quiz' ? (
+              <QuizReview assignment={currentAssignment} worksheet={worksheet} />
           ) : (
-            worksheet.type === 'quiz' ? (
-                <QuizReview assignment={currentAssignment} worksheet={worksheet} />
-            ) : (
-                <iframe
-                    srcDoc={iframeSrcDoc}
-                    title="Worksheet"
-                    className="w-full h-full border-0"
-                    sandbox="allow-scripts allow-same-origin allow-forms"
-                />
-            )
+              <iframe
+                  srcDoc={iframeSrcDoc}
+                  title="Worksheet"
+                  className="w-full h-full border-0"
+                  sandbox="allow-scripts allow-same-origin allow-forms"
+              />
           )}
         </div>
       </div>
@@ -410,6 +520,11 @@ function MarkingView({ assignment, classData, db, navigateTo }) {
                 </button>
             </div>
         </div>
+
+        {/* --- NEW ENGAGEMENT SUMMARY IS ADDED HERE --- */}
+        {worksheet.type !== 'quiz' && (
+            <EngagementSummary studentWork={currentAssignment.studentWork} totalTasks={worksheet.totalTasks} />
+        )}
 
         {worksheet.type !== 'quiz' && (
              <div className="mb-6 border p-3 rounded-md bg-gray-50">

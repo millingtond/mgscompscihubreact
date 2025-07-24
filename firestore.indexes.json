@@ -1,5 +1,20 @@
 {
   "indexes": [
+
+    {
+  "collectionGroup": "assignments",
+  "queryScope": "COLLECTION",
+  "fields": [
+    {
+      "fieldPath": "classId",
+      "order": "ASCENDING"
+    },
+    {
+      "fieldPath": "worksheetId",
+      "order": "ASCENDING"
+    }
+  ]
+},
     {
       "collectionGroup": "students",
       "queryScope": "COLLECTION",
