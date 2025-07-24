@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 const TOPICS_BY_YEAR = {
@@ -26,53 +26,162 @@ const TOPICS_BY_YEAR = {
 
 const YEAR_GROUPS = ['Year 7', 'Year 8', 'Year 9', 'GCSE', 'A-Level', 'Other'];
 
+// --- Reusable Confirmation Modal Component ---
+const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', cancelText = 'Cancel' }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+                <h3 className="text-lg font-bold mb-4">{title}</h3>
+                <p className="text-sm text-gray-600 mb-6">{message}</p>
+                <div className="flex justify-end space-x-4">
+                    <button onClick={onCancel} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">
+                        {cancelText}
+                    </button>
+                    <button onClick={onConfirm} className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
+                        {confirmText}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 // --- Quiz Editing Modal Component ---
-const QuizEditModal = ({ quiz, onSave, onCancel, db }) => {
-    const [editingQuiz, setEditingQuiz] = useState(JSON.parse(JSON.stringify(quiz))); // Deep copy
+const QuizEditModal = ({ quiz, onSave, onCancel, db, storage }) => {
+    const [editingQuiz, setEditingQuiz] = useState(JSON.parse(JSON.stringify(quiz)));
     const [isSaving, setIsSaving] = useState(false);
+    const [isConfirmDeleteQuestionOpen, setConfirmDeleteQuestionOpen] = useState(false);
+    const [questionIndexToDelete, setQuestionIndexToDelete] = useState(null);
 
-    const handleQuestionTextChange = (e, qIndex) => {
+    const handleQuestionUpdate = (qIndex, field, value) => {
         const newQuestions = [...editingQuiz.questions];
-        newQuestions[qIndex].questionText = e.target.value;
+        newQuestions[qIndex][field] = value;
         setEditingQuiz({ ...editingQuiz, questions: newQuestions });
     };
 
-    const handleOptionChange = (e, qIndex, oIndex) => {
+    const handleOptionChange = (qIndex, oIndex, value) => {
         const newQuestions = [...editingQuiz.questions];
-        newQuestions[qIndex].options[oIndex] = e.target.value;
+        newQuestions[qIndex].options[oIndex] = value;
         setEditingQuiz({ ...editingQuiz, questions: newQuestions });
     };
-    
-    const handleCorrectAnswerChange = (qIndex, oIndex) => {
+
+    const handleQuestionTypeChange = (qIndex, newType) => {
         const newQuestions = [...editingQuiz.questions];
-        newQuestions[qIndex].correctAnswerIndex = oIndex;
+        const currentQuestion = newQuestions[qIndex];
+        currentQuestion.type = newType;
+
+        // Reset answer fields when type changes
+        if (newType === 'multiple-choice') {
+            currentQuestion.options = ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
+            currentQuestion.correctAnswerIndex = 0;
+            delete currentQuestion.correctAnswer;
+            delete currentQuestion.modelAnswer;
+        } else if (newType === 'text-input') {
+            currentQuestion.correctAnswer = '';
+            delete currentQuestion.options;
+            delete currentQuestion.correctAnswerIndex;
+            delete currentQuestion.modelAnswer;
+        } else if (newType === 'extended-text') {
+            currentQuestion.modelAnswer = '';
+            delete currentQuestion.options;
+            delete currentQuestion.correctAnswerIndex;
+            delete currentQuestion.correctAnswer;
+        }
         setEditingQuiz({ ...editingQuiz, questions: newQuestions });
     };
 
     const handleAddQuestion = () => {
         const newQuestion = {
+            type: 'multiple-choice',
             questionText: 'New Question',
-            options: ['Option 1', 'Option 2'],
-            correctAnswerIndex: 0
+            options: ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
+            correctAnswerIndex: 0,
+            imageUrl: null,
+            altText: '',
+            imageLayout: 'top'
         };
         setEditingQuiz({ ...editingQuiz, questions: [...editingQuiz.questions, newQuestion] });
     };
 
-    const handleDeleteQuestion = (qIndex) => {
-        if (window.confirm('Are you sure you want to delete this question?')) {
-            const newQuestions = editingQuiz.questions.filter((_, index) => index !== qIndex);
+    const handleDeleteQuestionClick = (qIndex) => {
+        setQuestionIndexToDelete(qIndex);
+        setConfirmDeleteQuestionOpen(true);
+    };
+
+    const confirmDeleteQuestion = () => {
+        const newQuestions = editingQuiz.questions.filter((_, index) => index !== questionIndexToDelete);
+        setEditingQuiz({ ...editingQuiz, questions: newQuestions });
+        setConfirmDeleteQuestionOpen(false);
+        setQuestionIndexToDelete(null);
+    };
+
+    const handleImageUpload = async (e, qIndex) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+        if (!allowedTypes.includes(file.type)) {
+            alert('Invalid file type. Please upload a JPG, PNG, or GIF.');
+            return;
+        }
+        const maxSizeInMB = 2;
+        if (file.size > maxSizeInMB * 1024 * 1024) {
+            alert(`File is too large. Please upload an image smaller than ${maxSizeInMB}MB.`);
+            return;
+        }
+
+        handleQuestionUpdate(qIndex, 'isUploadingImage', true);
+
+        try {
+            const imageRef = ref(storage, `worksheets/${quiz.id}/question_${qIndex}_${Date.now()}`);
+            await uploadBytes(imageRef, file);
+            const downloadURL = await getDownloadURL(imageRef);
+
+            const newQuestions = [...editingQuiz.questions];
+            newQuestions[qIndex].imageUrl = downloadURL;
+            newQuestions[qIndex].isUploadingImage = false;
             setEditingQuiz({ ...editingQuiz, questions: newQuestions });
+
+        } catch (err) {
+            console.error("Error uploading image:", err);
+            alert("Image upload failed.");
+            handleQuestionUpdate(qIndex, 'isUploadingImage', false);
         }
     };
 
+    const handleRemoveImage = async (qIndex) => {
+        const question = editingQuiz.questions[qIndex];
+        if (!question.imageUrl) return;
+
+        try {
+            const imageRef = ref(storage, question.imageUrl);
+            await deleteObject(imageRef);
+            
+            const newQuestions = [...editingQuiz.questions];
+            newQuestions[qIndex].imageUrl = null;
+            newQuestions[qIndex].altText = '';
+            setEditingQuiz({ ...editingQuiz, questions: newQuestions });
+
+        } catch (err) {
+            console.error("Error deleting image:", err);
+            alert("Failed to remove image.");
+        }
+    };
+
+
     const handleSaveChanges = async () => {
         setIsSaving(true);
+        const questionsToSave = editingQuiz.questions.map(({ isUploadingImage, ...rest }) => rest);
+
         try {
             const worksheetRef = doc(db, "worksheets", editingQuiz.id);
             await updateDoc(worksheetRef, {
-                questions: editingQuiz.questions
+                questions: questionsToSave
             });
-            onSave(editingQuiz);
+            onSave({ ...editingQuiz, questions: questionsToSave });
         } catch (err) {
             console.error("Error saving quiz changes:", err);
             alert("Failed to save changes.");
@@ -82,44 +191,79 @@ const QuizEditModal = ({ quiz, onSave, onCancel, db }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl max-h-[90vh] flex flex-col">
-                <h3 className="text-xl font-bold mb-4">Editing Quiz: {editingQuiz.title}</h3>
-                <div className="overflow-y-auto flex-grow pr-2 space-y-4">
-                    {editingQuiz.questions.map((q, qIndex) => (
-                        <div key={qIndex} className="bg-gray-50 p-4 rounded-md border">
-                            <label className="block text-sm font-bold text-gray-700">Question {qIndex + 1}</label>
-                            <textarea value={q.questionText} onChange={(e) => handleQuestionTextChange(e, qIndex)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" rows="2" />
-                            <div className="mt-2 space-y-2">
-                                {q.options.map((opt, oIndex) => (
-                                    <div key={oIndex} className="flex items-center gap-2">
-                                        <input type="radio" name={`correct_q_${qIndex}`} checked={q.correctAnswerIndex === oIndex} onChange={() => handleCorrectAnswerChange(qIndex, oIndex)} />
-                                        <input type="text" value={opt} onChange={(e) => handleOptionChange(e, qIndex, oIndex)} className="flex-grow p-2 border border-gray-300 rounded-md" />
+        <>
+            <ConfirmationModal
+                isOpen={isConfirmDeleteQuestionOpen}
+                title="Delete Question"
+                message="Are you sure you want to permanently delete this question?"
+                onConfirm={confirmDeleteQuestion}
+                onCancel={() => setConfirmDeleteQuestionOpen(false)}
+                confirmText="Delete"
+            />
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-40">
+                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl max-h-[90vh] flex flex-col">
+                    <h3 className="text-xl font-bold mb-4">Editing Quiz: {editingQuiz.title}</h3>
+                    <div className="overflow-y-auto flex-grow pr-2 space-y-4">
+                        {editingQuiz.questions.map((q, qIndex) => (
+                            <div key={qIndex} className="bg-gray-50 p-4 rounded-md border">
+                                <div className="flex justify-between items-center mb-2">
+                                    <select value={q.type || 'multiple-choice'} onChange={(e) => handleQuestionTypeChange(qIndex, e.target.value)} className="p-1 border border-gray-300 rounded-md text-sm">
+                                        <option value="multiple-choice">Multiple Choice</option>
+                                        <option value="text-input">Text Input</option>
+                                        <option value="extended-text">Extended Text</option>
+                                    </select>
+                                    <button onClick={() => handleDeleteQuestionClick(qIndex)} className="text-red-500 hover:underline text-xs">Delete Question</button>
+                                </div>
+                                <textarea value={q.questionText} onChange={(e) => handleQuestionUpdate(qIndex, 'questionText', e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" rows="2" placeholder="Enter question text here..."/>
+                                
+                                {/* Answer section based on question type */}
+                                {q.type === 'multiple-choice' || !q.type ? (
+                                    <div className="mt-2 space-y-2">
+                                        {q.options.map((opt, oIndex) => (
+                                            <div key={oIndex} className="flex items-center gap-2">
+                                                <input type="radio" name={`correct_q_${qIndex}`} checked={q.correctAnswerIndex === oIndex} onChange={() => handleQuestionUpdate(qIndex, 'correctAnswerIndex', oIndex)} />
+                                                <input type="text" value={opt} onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)} className="flex-grow p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                ) : q.type === 'text-input' ? (
+                                    <div className="mt-2">
+                                        <label className="text-sm font-medium">Correct Answer:</label>
+                                        <input type="text" value={q.correctAnswer || ''} onChange={(e) => handleQuestionUpdate(qIndex, 'correctAnswer', e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md" />
+                                    </div>
+                                ) : (
+                                    <div className="mt-2">
+                                        <label className="text-sm font-medium">Model Answer (for teacher reference):</label>
+                                        <textarea value={q.modelAnswer || ''} onChange={(e) => handleQuestionUpdate(qIndex, 'modelAnswer', e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md" rows="3"></textarea>
+                                    </div>
+                                )}
                             </div>
-                             <button onClick={() => handleDeleteQuestion(qIndex)} className="text-red-500 hover:underline text-xs mt-3">Delete Question</button>
-                        </div>
-                    ))}
-                    <button onClick={handleAddQuestion} className="w-full text-sm bg-gray-200 hover:bg-gray-300 py-2 rounded-md">+ Add Question</button>
-                </div>
-                <div className="flex justify-end space-x-4 mt-6 pt-4 border-t">
-                    <button onClick={onCancel} className="bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400">Cancel</button>
-                    <button onClick={handleSaveChanges} disabled={isSaving} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-blue-400">
-                        {isSaving ? 'Saving...' : 'Save Changes'}
-                    </button>
+                        ))}
+                        <button onClick={handleAddQuestion} className="w-full text-sm bg-gray-200 hover:bg-gray-300 py-2 rounded-md">+ Add Question</button>
+                    </div>
+                    <div className="flex justify-end space-x-4 mt-6 pt-4 border-t">
+                        <button onClick={onCancel} className="bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400">Cancel</button>
+                        <button onClick={handleSaveChanges} disabled={isSaving} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-blue-400">
+                            {isSaving ? 'Saving...' : 'Save Changes'}
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
+
 
 function ManageWorksheets({ db, storage }) {
   const [worksheets, setWorksheets] = useState([]);
   const [title, setTitle] = useState('');
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [mainHtmlFile, setMainHtmlFile] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadMessage, setUploadMessage] = useState('');
 
   const [selectedYear, setSelectedYear] = useState('');
   const [availableTopics, setAvailableTopics] = useState([]);
@@ -136,12 +280,26 @@ function ManageWorksheets({ db, storage }) {
 
   const [editingQuiz, setEditingQuiz] = useState(null);
 
+  const [filterYear, setFilterYear] = useState('');
+  const [filterTopic, setFilterTopic] = useState('');
+  const [filterTopicsList, setFilterTopicsList] = useState([]);
+  const [sortBy, setSortBy] = useState('title');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+  const dragCounter = useRef(0);
+
+  const [isConfirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [worksheetToDelete, setWorksheetToDelete] = useState(null);
+
   useEffect(() => {
     const fetchWorksheets = async () => {
+      if (!db) return;
       try {
         const querySnapshot = await getDocs(collection(db, "worksheets"));
         const worksheetsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setWorksheets(worksheetsList.sort((a, b) => a.title.localeCompare(b.title)));
+        setWorksheets(worksheetsList);
       } catch (err) {
         console.error("Error fetching worksheets: ", err);
         setError('Failed to load worksheets.');
@@ -155,16 +313,18 @@ function ManageWorksheets({ db, storage }) {
       setSelectedYear('');
       setSelectedTopic('');
       setAvailableTopics([]);
-      setFile(null);
+      setFiles([]);
+      setMainHtmlFile('');
       setQuizFile(null);
       setQuizText('');
       setError('');
-      if (document.getElementById('file-input')) {
-        document.getElementById('file-input').value = '';
+      setUploadProgress(0);
+      setUploadMessage('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-      if (document.getElementById('quiz-file-input')) {
-        document.getElementById('quiz-file-input').value = '';
-      }
+      const quizFileInput = document.getElementById('quiz-file-input');
+      if (quizFileInput) quizFileInput.value = '';
   };
 
   const handleYearChange = (e) => {
@@ -174,45 +334,188 @@ function ManageWorksheets({ db, storage }) {
     setSelectedTopic('');
   };
 
+  const parseFilenameForMetadata = (filename) => {
+    const baseName = filename.replace(/\.(html|htm|txt)$/i, '');
+    const searchString = baseName.replace(/[-_]/g, ' ');
+    let foundYear = '';
+    let foundTopic = '';
+
+    const unitLessonRegex = /(U\d+[-_]?L\d+)|(U\d+)|(L\d+)/i;
+    const match = baseName.match(unitLessonRegex);
+    
+    let generatedTitle = baseName;
+    if (match) {
+        const lessonName = baseName.replace(match[0], '').replace(/^[_-]/, '').trim();
+        generatedTitle = `${match[0].toUpperCase()}-${lessonName}`;
+    }
+    setTitle(generatedTitle);
+
+    for (const year of YEAR_GROUPS) {
+        if (searchString.toLowerCase().includes(year.toLowerCase())) {
+            foundYear = year;
+            break;
+        }
+    }
+
+    if (foundYear && TOPICS_BY_YEAR[foundYear]) {
+        for (const topic of TOPICS_BY_YEAR[foundYear]) {
+            if (searchString.includes(topic.value)) {
+                foundTopic = topic.value;
+                break;
+            }
+        }
+    }
+    
+    if (foundYear) {
+        setSelectedYear(foundYear);
+        setAvailableTopics(TOPICS_BY_YEAR[foundYear] || []);
+        if (foundTopic) {
+            setSelectedTopic(foundTopic);
+        }
+    }
+  };
+
+  const processSelectedFiles = (selectedFiles) => {
+    const filesArray = Array.from(selectedFiles);
+    setFiles(filesArray);
+    const firstHtml = filesArray.find(f => f.name.endsWith('.html') || f.name.endsWith('.htm'));
+    if (firstHtml) {
+        setMainHtmlFile(firstHtml.name);
+        parseFilenameForMetadata(firstHtml.name);
+    } else {
+        setMainHtmlFile('');
+    }
+  };
+
   const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
+    processSelectedFiles(e.target.files);
   };
   
   const handleQuizFileChange = (e) => {
-    setQuizFile(e.target.files[0]);
+    const file = e.target.files[0];
+    setQuizFile(file);
+    if (file) {
+        parseFilenameForMetadata(file.name);
+    }
   };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+        setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        processSelectedFiles(e.dataTransfer.files);
+        e.dataTransfer.clearData();
+    }
+  };
+
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!file || !title || !selectedYear || !selectedTopic) {
-      setError('Please fill in all fields and select a file.');
+    if (files.length === 0 || !title || !selectedYear || !selectedTopic) {
+      setError('Please fill in all fields and select one or more files.');
+      return;
+    }
+    if (!mainHtmlFile) {
+      setError('Please select a main HTML file to serve as the entry point.');
       return;
     }
     setUploading(true);
     setError('');
+    setUploadProgress(0);
+    setUploadMessage('Initializing upload...');
+
+    const worksheetRef = doc(collection(db, "worksheets"));
+    const worksheetId = worksheetRef.id;
+    const storageFolder = `worksheets/${worksheetId}`;
 
     try {
-      const fileRef = ref(storage, `worksheets/${Date.now()}-${file.name}`);
-      const snapshot = await uploadBytes(fileRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+        const publicUrls = new Map();
+        const dependentFiles = files.filter(f => f.name !== mainHtmlFile);
+        const mainFileObject = files.find(f => f.name === mainHtmlFile);
+        const totalSteps = dependentFiles.length + 2;
+        let currentStep = 0;
 
-      const docRef = await addDoc(collection(db, "worksheets"), {
-        title: title,
-        yearGroup: selectedYear,
-        topic: selectedTopic,
-        url: downloadURL,
-        fileName: file.name,
-        type: 'html'
-      });
+        for (const file of dependentFiles) {
+            currentStep++;
+            setUploadMessage(`Uploading file ${currentStep} of ${files.length}: ${file.name}`);
+            const fileRef = ref(storage, `${storageFolder}/${file.name}`);
+            await uploadBytes(fileRef, file);
+            const url = await getDownloadURL(fileRef);
+            publicUrls.set(file.name, url);
+            setUploadProgress((currentStep / totalSteps) * 100);
+        }
 
-      setWorksheets(prev => [...prev, { id: docRef.id, title, yearGroup: selectedYear, topic: selectedTopic, url: downloadURL, fileName: file.name, type: 'html' }].sort((a, b) => a.title.localeCompare(b.title)));
-      resetForm();
+        setUploadMessage('Processing main HTML file...');
+        let mainHtmlContent = await mainFileObject.text();
+
+        const linkRegex = /(href|src)=["'](?!https?:\/\/)(.*?)["']/g;
+        mainHtmlContent = mainHtmlContent.replace(linkRegex, (match, attr, relativePath) => {
+            const fileName = relativePath.split('/').pop();
+            if (publicUrls.has(fileName)) {
+                return `${attr}="${publicUrls.get(fileName)}"`;
+            }
+            return match;
+        });
+
+        currentStep++;
+        setUploadMessage(`Uploading main file: ${mainHtmlFile}`);
+        const modifiedHtmlBlob = new Blob([mainHtmlContent], { type: 'text/html' });
+        const mainFileStorageRef = ref(storage, `${storageFolder}/${mainHtmlFile}`);
+        await uploadBytes(mainFileStorageRef, modifiedHtmlBlob);
+        const mainFileUrl = await getDownloadURL(mainFileStorageRef);
+        setUploadProgress((currentStep / totalSteps) * 100);
+
+        currentStep++;
+        setUploadMessage('Saving to database...');
+        const newWorksheetData = {
+            title: title,
+            yearGroup: selectedYear,
+            topic: selectedTopic,
+            url: mainFileUrl,
+            type: 'html',
+            filePaths: files.map(f => f.name),
+            createdAt: new Date(),
+        };
+        await setDoc(worksheetRef, newWorksheetData);
+        setUploadProgress(100);
+        setUploadMessage('Upload complete!');
+
+        setWorksheets(prev => [...prev, { id: worksheetId, ...newWorksheetData }]);
+        
+        setTimeout(() => {
+            resetForm();
+            setUploading(false);
+        }, 2000);
 
     } catch (err) {
-      console.error("Error uploading worksheet: ", err);
-      setError('File upload failed. Please try again.');
-    } finally {
-      setUploading(false);
+        console.error("Error uploading worksheet: ", err);
+        setError('File upload failed. Please try again.');
+        setUploading(false);
     }
   };
 
@@ -223,23 +526,44 @@ function ManageWorksheets({ db, storage }) {
             throw new Error("No questions found. Make sure your text contains blocks starting with [START Q].");
         }
         const parsedQuestions = questionBlocks.map((block, index) => {
-            const questionData = { questionText: '', options: [], correctAnswerIndex: null };
+            const questionData = { 
+                type: 'multiple-choice', // Default type
+                questionText: '', 
+                imageUrl: null, 
+                altText: '', 
+                imageLayout: 'top' 
+            };
             const lines = block.split('\n').filter(line => line.trim() !== '');
             
-            const questionLine = lines.find(line => line.trim().startsWith('Question:'));
-            if (!questionLine) throw new Error(`Question ${index + 1} is missing a "Question:" line.`);
-            questionData.questionText = questionLine.replace('Question:', '').trim();
+            lines.forEach(line => {
+                const trimmedLine = line.trim();
+                if (trimmedLine.startsWith('[TYPE]:')) {
+                    questionData.type = trimmedLine.replace('[TYPE]:', '').trim();
+                } else if (trimmedLine.startsWith('Question:')) {
+                    questionData.questionText = trimmedLine.replace('Question:', '').trim();
+                } else if (trimmedLine.startsWith('O:')) {
+                    if (!questionData.options) questionData.options = [];
+                    questionData.options.push(trimmedLine.replace('O:', '').trim());
+                } else if (trimmedLine.startsWith('A:')) {
+                    if (questionData.type === 'multiple-choice') {
+                        questionData.correctAnswerIndex = parseInt(trimmedLine.replace('A:', '').trim(), 10);
+                    } else {
+                        questionData.correctAnswer = trimmedLine.replace('A:', '').trim();
+                    }
+                }
+            });
 
-            questionData.options = lines.filter(line => line.trim().startsWith('O:')).map(opt => opt.replace('O:', '').trim());
-            if (questionData.options.length < 2) throw new Error(`Question ${index + 1} must have at least two options starting with "O:".`);
-
-            const answerLine = lines.find(line => line.trim().startsWith('A:'));
-            if (!answerLine) throw new Error(`Question ${index + 1} is missing an "A:" line for the answer index.`);
-            const answerIndex = parseInt(answerLine.replace('A:', '').trim(), 10);
-            if (isNaN(answerIndex) || answerIndex < 0 || answerIndex >= questionData.options.length) {
-                throw new Error(`The answer index for Question ${index + 1} is invalid or out of bounds.`);
+            // Validation
+            if (!questionData.questionText) throw new Error(`Question ${index + 1} is missing a "Question:" line.`);
+            if (questionData.type === 'multiple-choice' && (!questionData.options || questionData.options.length < 2)) {
+                throw new Error(`Multiple choice Question ${index + 1} must have at least two options.`);
             }
-            questionData.correctAnswerIndex = answerIndex;
+            if (questionData.type === 'multiple-choice' && typeof questionData.correctAnswerIndex !== 'number') {
+                 throw new Error(`Multiple choice Question ${index + 1} is missing a valid "A:" line for the answer index.`);
+            }
+             if (questionData.type === 'text-input' && typeof questionData.correctAnswer !== 'string') {
+                 throw new Error(`Text input Question ${index + 1} is missing a valid "A:" line for the answer.`);
+            }
 
             return questionData;
         });
@@ -253,7 +577,7 @@ function ManageWorksheets({ db, storage }) {
             createdAt: new Date(),
         };
         const docRef = await addDoc(collection(db, "worksheets"), newQuiz);
-        setWorksheets(prev => [...prev, { id: docRef.id, ...newQuiz }].sort((a,b) => a.title.localeCompare(b.title)));
+        setWorksheets(prev => [...prev, { id: docRef.id, ...newQuiz }]);
         resetForm();
 
     } catch (err) {
@@ -302,13 +626,21 @@ function ManageWorksheets({ db, storage }) {
   };
   
   const handleDownloadTemplate = () => {
-    const templateContent = `// INSTRUCTIONS
+    const templateContent = `// --- AI PROMPT: DO NOT DELETE THIS SECTION ---
+// You are an expert quiz creator for Computer Science students.
+// Your task is to generate a quiz based on the flashcard content provided at the end of this file.
+// You MUST adhere strictly to the following format for every question. Do not add any other text or formatting.
+// Each question must have exactly 4 options.
+// The incorrect options (distractors) should be plausible and relevant to the topic, not obviously wrong or easy to eliminate.
+// Ensure that every piece of information from the flashcard content is assessed by at least one question.
+
+// --- FORMAT INSTRUCTIONS ---
 // - Each question block must start with [START Q] on a new line.
 // - The question text must start with "Question: ".
-// - Each multiple-choice option must start with "O: " on a new line.
+// - Each multiple-choice option must start with "O: ".
 // - The correct answer must be specified with "A: " followed by the index of the correct option (starting from 0).
-// - Do not include [END Q] markers, the parser handles this automatically.
 
+// --- EXAMPLE ---
 [START Q]
 Question: What does CPU stand for?
 O: Central Processing Unit
@@ -324,32 +656,66 @@ O: HDD
 O: RAM
 O: ROM
 A: 2
+
+// --- PASTE YOUR FLASHCARD CONTENT BELOW THIS LINE ---
+
 `;
     const blob = new Blob([templateContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'Quiz_Template.txt';
+    link.download = 'AI_Quiz_Template.txt';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  const handleDelete = async (worksheet) => {
-    if (!window.confirm(`Are you sure you want to delete "${worksheet.title}"?`)) {
-        return;
-    }
+  const handleDeleteClick = (worksheet) => {
+    setWorksheetToDelete(worksheet);
+    setConfirmDeleteOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!worksheetToDelete) return;
+
     try {
-        await deleteDoc(doc(db, "worksheets", worksheet.id));
-        if (worksheet.type === 'html' && worksheet.fileName) {
-            const fileRef = ref(storage, `worksheets/${worksheet.fileName}`);
-            await deleteObject(fileRef);
+        if (worksheetToDelete.type === 'quiz' && worksheetToDelete.questions) {
+            const imageDeletePromises = worksheetToDelete.questions.map(q => {
+                if (q.imageUrl) {
+                    const imageRef = ref(storage, q.imageUrl);
+                    return deleteObject(imageRef).catch(err => {
+                         if (err.code !== 'storage/object-not-found') {
+                            console.error("Could not delete quiz image:", err);
+                         }
+                    });
+                }
+                return Promise.resolve();
+            });
+            await Promise.all(imageDeletePromises);
         }
-        setWorksheets(prev => prev.filter(w => w.id !== worksheet.id));
+
+        if (worksheetToDelete.type === 'html' && worksheetToDelete.filePaths && worksheetToDelete.filePaths.length > 0) {
+            const deletePromises = worksheetToDelete.filePaths.map(filePath => {
+                const fileRef = ref(storage, `worksheets/${worksheetToDelete.id}/${filePath}`);
+                return deleteObject(fileRef).catch(err => {
+                    if (err.code !== 'storage/object-not-found') throw err;
+                });
+            });
+            await Promise.all(deletePromises);
+        }
+        
+        await deleteDoc(doc(db, "worksheets", worksheetToDelete.id));
+
+        setWorksheets(prev => prev.filter(w => w.id !== worksheetToDelete.id));
+        setError('');
+
     } catch (err) {
         console.error("Error deleting worksheet:", err);
-        setError(`Failed to delete worksheet. It may have already been removed.`);
+        setError(`Failed to delete worksheet. Please refresh and try again.`);
+    } finally {
+        setConfirmDeleteOpen(false);
+        setWorksheetToDelete(null);
     }
   };
 
@@ -396,9 +762,54 @@ A: 2
       setEditingQuiz(null);
   };
 
+  const filteredAndSortedWorksheets = useMemo(() => {
+    let result = [...worksheets];
+
+    if (searchTerm) {
+        result = result.filter(ws => ws.title.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
+
+    if (filterYear) {
+        result = result.filter(ws => ws.yearGroup === filterYear);
+    }
+    if (filterTopic) {
+        result = result.filter(ws => ws.topic === filterTopic);
+    }
+
+    if (sortBy === 'title') {
+        result.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortBy === 'newest') {
+        result.sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
+    } else if (sortBy === 'oldest') {
+        result.sort((a, b) => (a.createdAt?.toDate() || 0) - (b.createdAt?.toDate() || 0));
+    }
+
+    return result;
+  }, [worksheets, filterYear, filterTopic, sortBy, searchTerm]);
+
+  const handleFilterYearChange = (e) => {
+      const year = e.target.value;
+      setFilterYear(year);
+      setFilterTopic('');
+      if (year) {
+          setFilterTopicsList(TOPICS_BY_YEAR[year] || []);
+      } else {
+          setFilterTopicsList([]);
+      }
+  };
+
   return (
     <div className="p-8">
-      {editingQuiz && <QuizEditModal quiz={editingQuiz} onSave={handleSaveQuiz} onCancel={handleCancelQuizEdit} db={db} />}
+      {editingQuiz && <QuizEditModal quiz={editingQuiz} onSave={handleSaveQuiz} onCancel={handleCancelQuizEdit} db={db} storage={storage} />}
+      
+      <ConfirmationModal
+        isOpen={isConfirmDeleteOpen}
+        title="Delete Material"
+        message={`Are you sure you want to permanently delete "${worksheetToDelete?.title}"? This action cannot be undone.`}
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        confirmText="Delete"
+      />
 
       <h2 className="text-3xl font-bold mb-6">Manage Learning Materials</h2>
         
@@ -434,8 +845,51 @@ A: 2
 
             {creationMode === 'worksheet' && (
                 <div>
-                    <label htmlFor="file-input" className="block text-sm font-medium text-gray-700">Worksheet File</label>
-                    <input type="file" id="file-input" onChange={handleFileChange} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                    <label className="block text-sm font-medium text-gray-700">Worksheet File(s)</label>
+                    <div 
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
+                        className={`mt-1 flex justify-center items-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md transition-colors duration-200 ${isDragging ? 'border-blue-600 bg-blue-50' : 'border-gray-300'}`}
+                    >
+                        <div className="space-y-1 text-center">
+                            <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <div className="flex text-sm text-gray-600">
+                                <label htmlFor="file-input" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                                    <span>Upload files</span>
+                                    <input ref={fileInputRef} id="file-input" name="file-input" type="file" multiple className="sr-only" onChange={handleFileChange} />
+                                </label>
+                                <p className="pl-1">or drag and drop</p>
+                            </div>
+                            <p className="text-xs text-gray-500">HTML, CSS, JS, images, etc.</p>
+                        </div>
+                    </div>
+                    
+                    {files.length > 0 && (
+                        <div className="mt-4 p-3 bg-gray-50 rounded-md">
+                            <p className="font-semibold text-sm text-gray-800">Select the main HTML file:</p>
+                            <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                                {files.filter(f => f.name.endsWith('.html') || f.name.endsWith('.htm')).map(file => (
+                                    <div key={file.name} className="flex items-center">
+                                        <input 
+                                            type="radio" 
+                                            id={`main-file-${file.name}`} 
+                                            name="main-html-file" 
+                                            value={file.name}
+                                            checked={mainHtmlFile === file.name}
+                                            onChange={(e) => setMainHtmlFile(e.target.value)}
+                                            className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                        />
+                                        <label htmlFor={`main-file-${file.name}`} className="ml-2 block text-sm text-gray-900">{file.name}</label>
+                                    </div>
+                                ))}
+                            </div>
+                             <p className="text-xs text-gray-500 mt-2">Selected {files.length} file(s) total.</p>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -471,8 +925,19 @@ A: 2
                     )}
                 </div>
             )}
-             <div className="mt-6">
-                <button type="submit" disabled={uploading} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-blue-400">
+            <div className="mt-6">
+                {uploading && (
+                    <div className="mb-4">
+                        <p className="text-sm font-medium text-gray-700 mb-1">{uploadMessage}</p>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div 
+                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                                style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                )}
+                <button type="submit" disabled={uploading} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed">
                     {uploading ? 'Processing...' : (creationMode === 'quiz' ? 'Create Quiz' : 'Upload Worksheet')}
                 </button>
             </div>
@@ -480,42 +945,81 @@ A: 2
       </div>
 
       <div>
-        <h3 className="text-xl font-semibold mb-4">Existing Materials</h3>
+        <h3 className="text-xl font-semibold mb-4">Existing Materials ({filteredAndSortedWorksheets.length})</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+            <div className="md:col-span-3">
+                <label htmlFor="search-input" className="block text-sm font-medium text-gray-700">Search by Title</label>
+                <input 
+                    type="text" 
+                    id="search-input"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Type to search..."
+                    className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+                />
+            </div>
+            <div>
+                <label htmlFor="filter-year" className="block text-sm font-medium text-gray-700">Filter by Year</label>
+                <select id="filter-year" value={filterYear} onChange={handleFilterYearChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md bg-white">
+                    <option value="">All Years</option>
+                    {YEAR_GROUPS.map(year => <option key={year} value={year}>{year}</option>)}
+                </select>
+            </div>
+            <div>
+                <label htmlFor="filter-topic" className="block text-sm font-medium text-gray-700">Filter by Topic</label>
+                <select id="filter-topic" value={filterTopic} onChange={(e) => setFilterTopic(e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md bg-white" disabled={!filterYear}>
+                    <option value="">All Topics</option>
+                    {filterTopicsList.map(topic => <option key={topic.value} value={topic.value}>{topic.label}</option>)}
+                </select>
+            </div>
+            <div>
+                <label htmlFor="sort-by" className="block text-sm font-medium text-gray-700">Sort By</label>
+                <select id="sort-by" value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md bg-white">
+                    <option value="title">Title (A-Z)</option>
+                    <option value="newest">Date (Newest First)</option>
+                    <option value="oldest">Date (Oldest First)</option>
+                </select>
+            </div>
+        </div>
+        
         <div className="space-y-3">
-          {worksheets.length > 0 ? (
-            worksheets.map(ws => (
+          {filteredAndSortedWorksheets.length > 0 ? (
+            filteredAndSortedWorksheets.map(ws => (
               <div key={ws.id} className="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
-                {editingTitleId === ws.id ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="flex-1 p-2 border border-blue-500 rounded-md"/>
-                    <button onClick={() => handleSaveTitle(ws.id)} className="text-sm bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600">Save</button>
-                    <button onClick={handleCancelTitleEdit} className="text-sm bg-gray-200 px-3 py-2 rounded-md hover:bg-gray-300">Cancel</button>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <p className="font-semibold">{ws.title}
-                        {ws.type === 'quiz' && <span className="ml-2 text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded-full">Quiz</span>}
-                      </p>
-                      <p className="text-sm text-gray-500">{ws.yearGroup} - Topic {ws.topic}</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      {ws.type === 'html' && <a href={ws.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">View</a>}
-                      <button onClick={() => {
-                          if (ws.type === 'quiz') {
-                              handleStartQuizEdit(ws);
-                          } else {
-                              handleStartTitleEdit(ws);
-                          }
-                      }} className="text-yellow-600 hover:underline text-sm font-semibold">Edit</button>
-                      <button onClick={() => handleDelete(ws)} className="text-red-600 hover:underline text-sm">Delete</button>
-                    </div>
-                  </>
-                )}
+                <div className="flex-grow flex justify-between items-center">
+                    {editingTitleId === ws.id ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="flex-1 p-2 border border-blue-500 rounded-md"/>
+                        <button onClick={() => handleSaveTitle(ws.id)} className="text-sm bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600">Save</button>
+                        <button onClick={handleCancelTitleEdit} className="text-sm bg-gray-200 px-3 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="font-semibold">{ws.title}
+                            {ws.type === 'quiz' && <span className="ml-2 text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded-full">Quiz</span>}
+                            {ws.type === 'html' && <span className="ml-2 text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-1 rounded-full">HTML</span>}
+                          </p>
+                          <p className="text-sm text-gray-500">{ws.yearGroup} - Topic {ws.topic}</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          {ws.type === 'html' && <a href={ws.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">View</a>}
+                          <button onClick={() => {
+                              if (ws.type === 'quiz') {
+                                  handleStartQuizEdit(ws);
+                              } else {
+                                  handleStartTitleEdit(ws);
+                              }
+                          }} className="text-yellow-600 hover:underline text-sm font-semibold">Edit</button>
+                          <button onClick={() => handleDeleteClick(ws)} className="text-red-600 hover:underline text-sm">Delete</button>
+                        </div>
+                      </>
+                    )}
+                </div>
               </div>
             ))
           ) : (
-            <p className="text-gray-500">No materials have been created yet.</p>
+            <p className="text-gray-500 text-center py-4">No materials match the current filters.</p>
           )}
         </div>
       </div>

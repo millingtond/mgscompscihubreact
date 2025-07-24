@@ -98,38 +98,29 @@ const QuizTaker = ({ assignment, worksheetData, db, app }) => {
     }
   };
 
-  // --- MODIFIED: This function now calls the secure cloud function ---
   const handleQuizSubmit = async () => {
-    // Use a custom modal in a real app, but window.confirm is fine for now.
     if (!window.confirm("Are you sure you want to submit your answers? You cannot change them after submitting.")) {
       return;
     }
     setIsSubmitting(true);
 
-    // Ensure nulls are sent for unanswered questions for consistent data structure
     const finalAnswers = studentAnswers.map(ans => (typeof ans === 'number' ? ans : null));
 
     try {
-      // 1. Initialize the Firebase Functions service
       const functions = getFunctions(app);
-      // 2. Get a reference to your 'submitQuiz' cloud function
       const submitQuiz = httpsCallable(functions, 'submitQuiz');
-
-      // 3. Call the function with the required data
       const result = await submitQuiz({
         assignmentId: assignment.id,
         answers: finalAnswers
       });
 
-      // 4. The function returns the score; update the UI state
       if (result.data && typeof result.data.score === 'number') {
         setFinalScore(result.data.score);
       }
-      setQuizFinished(true); // Lock the quiz from further edits
+      setQuizFinished(true);
 
     } catch (err) {
       console.error("Error submitting quiz via cloud function:", err);
-      // Provide user-friendly error message
       alert(`There was an error submitting your quiz. Please try again. \nError: ${err.message}`);
     } finally {
       setIsSubmitting(false);
@@ -139,7 +130,6 @@ const QuizTaker = ({ assignment, worksheetData, db, app }) => {
   // If the quiz is finished, show the results view
   if (quizFinished) {
     const scoreToShow = finalScore;
-    // Use the answers from the assignment document for the review, as it's the source of truth
     const resultsToShow = assignment.studentWork?.answers || studentAnswers;
 
     return (
@@ -154,6 +144,12 @@ const QuizTaker = ({ assignment, worksheetData, db, app }) => {
           {worksheetData.questions.map((q, index) => (
             <div key={index} className={`p-4 rounded-md mb-3 border-l-4 ${resultsToShow[index] === q.correctAnswerIndex ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}`}>
               <p className="font-bold">{index + 1}. {q.questionText}</p>
+              {/* --- FIX: Added image display to review section --- */}
+              {q.imageUrl && (
+                <div className="my-4">
+                    <img src={q.imageUrl} alt={`Visual for question ${index + 1}`} className="max-w-full md:max-w-sm rounded-lg shadow-sm" />
+                </div>
+              )}
               <p className="text-sm mt-2">You answered: <span className="font-semibold">{q.options[resultsToShow[index]] ?? 'No Answer'}</span></p>
               {resultsToShow[index] !== q.correctAnswerIndex && (
                 <p className="text-sm text-green-700">Correct answer: <span className="font-semibold">{q.options[q.correctAnswerIndex]}</span></p>
@@ -170,6 +166,12 @@ const QuizTaker = ({ assignment, worksheetData, db, app }) => {
     <div className="bg-white p-4 sm:p-8 rounded-lg shadow-lg">
       <div className="mb-6">
         <p className="text-gray-600 text-sm">Question {currentQuestionIndex + 1} of {worksheetData.questions.length}</p>
+        {/* --- FIX: Added image display to active question --- */}
+        {currentQuestion.imageUrl && (
+            <div className="my-4">
+                <img src={currentQuestion.imageUrl} alt={`Visual for question ${currentQuestionIndex + 1}`} className="max-w-full md:max-w-md rounded-lg shadow-sm" />
+            </div>
+        )}
         <h3 className="text-2xl font-semibold mt-1">{currentQuestion.questionText}</h3>
       </div>
 
