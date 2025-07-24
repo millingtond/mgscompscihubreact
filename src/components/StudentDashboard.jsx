@@ -9,6 +9,12 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Do not fetch data if the student prop is not available
+    if (!student) {
+        setLoading(false);
+        return;
+    }
+
     const fetchData = async () => {
       try {
         const auth = getAuth(app);
@@ -22,7 +28,6 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
         
         const idTokenResult = await currentUser.getIdTokenResult(true);
         const claims = idTokenResult.claims;
-        console.log("Verified user auth claims:", claims);
         
         const studentUIDFromClaims = claims.studentUID;
         const classIdFromClaims = claims.classId;
@@ -41,8 +46,8 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
         const assignmentsWithWorksheetData = await Promise.all(
           assignmentsSnapshot.docs.map(async (assignmentDoc) => {
             const assignmentData = assignmentDoc.data();
+            // --- BUG FIX --- Corrected property from `worksId` to `worksheetId`
             if (assignmentData.worksheetId) {
-                // FIX: Corrected a typo here from `worksId` to `worksheetId`
                 const worksheetRef = doc(db, "worksheets", assignmentData.worksheetId);
                 const worksheetSnap = await getDoc(worksheetRef);
                 if (worksheetSnap.exists()) {
@@ -94,6 +99,16 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
     }
   };
 
+  // --- FIX --- Add a guard clause to prevent rendering if the student prop is missing.
+  // This prevents the "cannot read properties of undefined" error.
+  if (!student) {
+      return (
+          <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+              <p className="text-lg text-gray-600">Loading student information...</p>
+          </div>
+      );
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
        <header className="bg-white shadow-md">
@@ -101,6 +116,13 @@ function StudentDashboard({ student, handleLogout, db, navigateTo, app }) {
             <h1 className="text-xl font-bold text-gray-800">MGS Student Portal</h1>
             <div>
               <span className="text-gray-700 mr-4">Welcome, {student.username}!</span>
+              {/* --- NEW --- Button to navigate to the progress dashboard */}
+              <button
+                onClick={() => navigateTo('progress')}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 mr-4"
+              >
+                View My Progress
+              </button>
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-red-500 text-white rounded-md text-sm font-medium hover:bg-red-600"

@@ -16,6 +16,9 @@ import StudentWorkView from './components/StudentWorkView';
 import WorksheetViewer from './components/WorksheetViewer';
 import MarkingView from './components/MarkingView';
 import MarkbookView from './components/MarkbookView';
+// --- NEW --- Import the new ProgressDashboard component
+import ProgressDashboard from './components/ProgressDashboard';
+
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_API_KEY,
@@ -41,48 +44,41 @@ function App() {
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   
+  // This state now controls which view the student sees
   const [studentPage, setStudentPage] = useState('dashboard');
   
   const [selectedAssignment, setSelectedAssignment] = useState(null);
 
-  // --- THIS IS THE KEY CHANGE ---
-  // This single listener now handles all authentication and determines the user type.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setLoading(true);
       if (user) {
-        // A user is signed in. Now, check if they are a student or a teacher.
         const idTokenResult = await user.getIdTokenResult();
         
-        // Check for the custom student claim we created in the login function.
         if (idTokenResult.claims.studentUID) {
-          // This is a student.
           const studentRef = doc(db, "students", user.uid);
           const studentSnap = await getDoc(studentRef);
           if (studentSnap.exists()) {
-            setLoggedInStudent(studentSnap.data());
-            setTeacherUser(null); // Ensure no teacher is logged in
+            setLoggedInStudent({ uid: user.uid, ...studentSnap.data() });
+            setTeacherUser(null);
+            setStudentPage('dashboard'); // Default to dashboard on login
           } else {
-            // Student auth exists but no DB record, sign out to be safe.
             await signOut(auth);
           }
         } else {
-          // This is a teacher.
           const teacherRef = doc(db, "teachers", user.uid);
           const teacherSnap = await getDoc(teacherRef);
           if (teacherSnap.exists()) {
             setTeacherUser(user);
-            setLoggedInStudent(null); // Ensure no student is logged in
+            setLoggedInStudent(null);
+            setTeacherPage('dashboard'); // Default to dashboard on login
           } else {
-            // Teacher auth exists but no DB record, sign out.
             await signOut(auth);
           }
         }
       } else {
-        // No user is signed in.
         setTeacherUser(null);
         setLoggedInStudent(null);
-        sessionStorage.removeItem('studentUser');
         setAuthState('landing');
       }
       setLoading(false);
@@ -90,10 +86,8 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // The handleStudentLogin function is no longer needed, as onAuthStateChanged handles everything.
-
   const handleLogout = () => {
-    signOut(auth); // This will trigger onAuthStateChanged to clear state and redirect.
+    signOut(auth);
   };
 
   const navigateTeacherTo = (page, classData = null, studentData = null, assignmentData = null) => {
@@ -103,6 +97,7 @@ function App() {
     setTeacherPage(page);
   };
 
+  // Updated navigation function for students
   const navigateStudentTo = (page, assignmentData = null) => {
     if (assignmentData) {
       setSelectedAssignment(assignmentData);
@@ -114,12 +109,17 @@ function App() {
     return <div className="flex items-center justify-center h-screen"><div className="text-xl">Loading...</div></div>;
   }
   
-  // The rendering logic remains the same, but it's now driven by a more reliable state.
+  // --- UPDATED --- Logic to render different pages for a logged-in student
   if (loggedInStudent) {
-    if (studentPage === 'worksheet-viewer') {
-      return <WorksheetViewer assignment={selectedAssignment} db={db} navigateTo={navigateStudentTo} returnRoute="dashboard" app={app} />
+    switch(studentPage) {
+      case 'worksheet-viewer':
+        return <WorksheetViewer assignment={selectedAssignment} db={db} navigateTo={navigateStudentTo} returnRoute="dashboard" app={app} />;
+      case 'progress':
+        return <ProgressDashboard app={app} navigateTo={navigateStudentTo} />;
+      case 'dashboard':
+      default:
+        return <StudentDashboard student={loggedInStudent} handleLogout={handleLogout} db={db} navigateTo={navigateStudentTo} app={app} />;
     }
-    return <StudentDashboard student={loggedInStudent} handleLogout={handleLogout} db={db} navigateTo={navigateStudentTo} app={app} />
   }
 
   if (teacherUser) {
@@ -148,13 +148,10 @@ function App() {
     );
   }
   
-  // The login flow is now simpler.
   switch(authState) {
     case 'teacher-login':
-      // TeacherLogin now only needs `app` and `setAuthState`
       return <TeacherLogin app={app} setAuthState={setAuthState} />;
     case 'student-login':
-      // StudentLogin no longer needs an `onLogin` prop.
       return <StudentLogin setAuthState={setAuthState} app={app} />;
     case 'landing':
     default:
